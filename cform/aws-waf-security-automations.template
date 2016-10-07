@@ -686,7 +686,7 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "512",
-        "Timeout": "60"
+        "Timeout": "300"
       }
     },
     "LambdaInvokePermissionLogParser": {
@@ -834,7 +834,7 @@
         },
         "Runtime": "nodejs4.3",
         "MemorySize": "128",
-        "Timeout": "60"
+        "Timeout": "300"
       }
     },
     "LambdaWAFReputationListsParserEventsRule": {
@@ -1009,7 +1009,7 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "128",
-        "Timeout": "60"
+        "Timeout": "300"
       }
     },
     "LambdaInvokePermissionBadBot": {
@@ -1280,7 +1280,7 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "128",
-        "Timeout": "60"
+        "Timeout": "300"
       }
     },
     "WafWebAclRuleControler": {
@@ -1484,7 +1484,7 @@
           "S3Key": "library/solution-helper/v1/solution-helper.zip"
         },
         "Runtime": "python2.7",
-        "Timeout": "60"
+        "Timeout": "300"
       }
     },
     "CreateUniqueID": {
