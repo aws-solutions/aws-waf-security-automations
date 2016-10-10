@@ -658,7 +658,7 @@
       "Properties": {
         "Description": {
           "Fn::Join": ["", [
-            "This lambda function parses Amazon CloudFront access logs to identify suspicious behavior, such as an abnormal amount of requests or errors. It then blocks those suspicious source IP addresses for a customer-defined period of time. Parameters: ", {
+            "This function parses CloudFront access logs to identify suspicious behavior, such as an abnormal amount of requests or errors. It then blocks those IP addresses for a customer-defined period of time. Parameters: ", {
               "Ref": "RequestThreshold"
             },
             ",", {
@@ -1607,14 +1607,14 @@
       "Condition": "BadBotProtectionActivated"
     },
     "ReputationListsSet1ID": {
-      "Description": "Bad Bot IP Set ID",
+      "Description": "Reputation Lists IP Set 1 ID",
       "Value": {
         "Ref": "WAFReputationListsSet1"
       },
       "Condition": "ReputationListsProtectionActivated"
     },
     "ReputationListsSet2ID": {
-      "Description": "Bad Bot IP Set ID",
+      "Description": "Reputation Lists IP Set 2 ID",
       "Value": {
         "Ref": "WAFReputationListsSet2"
       },

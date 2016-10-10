@@ -337,7 +337,7 @@ def can_delete_rule(stack_name, rule_id):
         try:
             waf = boto3.client('waf')
             rule_detail = waf.get_rule(RuleId=rule_id)
-            result = (stack_name == None or rule_detail['Rule']['Name'].startswith(stack_name))
+            result = (stack_name == None or (rule_detail['Rule']['Name'].startswith(stack_name + " - ") and rule_detail['Rule']['Name'] != (stack_name + " - Whitelist Rule") ))
         except Exception, e:
             print(e)
             delay = math.pow(2, attempt)
