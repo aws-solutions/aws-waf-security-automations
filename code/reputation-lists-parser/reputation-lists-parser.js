@@ -457,6 +457,7 @@ function send_anonymous_usage_data(event, context) {
                     "UUID": result[0],
                     "TimeStamp": new Date(),
                     "Data": {
+                        "Version": "2",
                         "data_type": "reputation_list",
                         "ip_reputation_lists_size": result[1],
                         "allowed_requests": result[2],

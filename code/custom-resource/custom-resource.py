@@ -391,6 +391,7 @@ def send_anonymous_usage_data(action_type, resource_properties):
             "TimeStamp": time_stamp,
             "Data":
             {
+                "Version": "2",
                 "data_type" : "custom_resource",
                 "region" : resource_properties['Region'],
                 "action" : action_type,
