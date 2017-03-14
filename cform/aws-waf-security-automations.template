@@ -7,18 +7,18 @@
         "Label": {
           "default": "Protection List"
         },
-        "Parameters": ["SqlInjectionProtectionParam", "CrossSiteScriptingProtectionParam", "ActivateHttpFloodProtectionParam", "ActivateScansProbesProtectionParam", "ActivateReputationListsProtectionParam", "ActivateBadBotProtectionParam"]
-      }, {
+        "Parameters": ["SqlInjectionProtectionParam", "CrossSiteScriptingProtectionParam", "ActivateHttpFloodProtectionParam", "ActivateScansProbesProtectionParam", "ActivateReputationListsProtectionParam", "ActivateBadBotProtectionParam", "ActivateSizeProtectionParam", "ActivateURIsProtectionParam"]
+        }, {
         "Label": {
           "default": "Settings"
         },
         "Parameters": ["CloudFrontAccessLogBucket"]
-      }, {
+        }, {
         "Label": {
           "default": "Advanced Settings"
         },
-        "Parameters": ["RequestThreshold", "ErrorThreshold", "WAFBlockPeriod"]
-      }, {
+        "Parameters": ["RequestThreshold", "ErrorThreshold", "WAFBlockPeriod", "WAFSizeURI", "WAFSizeQuery", "WAFSizeBody", "WAFAllowedURIs"]
+        }, {
         "Label": {
           "default": "Anonymous Metrics Request"
         },
@@ -43,6 +43,12 @@
         "ActivateBadBotProtectionParam": {
           "default": "Activate Bad Bot Protection"
         },
+        "ActivateSizeProtectionParam": {
+          "default": "Activate Size Protection"
+        },
+        "ActivateURIsProtectionParam": {
+          "default": "Activate Specific URIs Protection"
+        },
         "CloudFrontAccessLogBucket": {
           "default": "CloudFront Access Log Bucket Name"
         },
@@ -57,12 +63,22 @@
         },
         "WAFBlockPeriod": {
           "default": "WAF Block Period"
+        },
+        "WAFSizeURI": {
+        "default": "Max Size for URI of Request"
+        },
+        "WAFSizeQuery": {
+          "default": "Max Size for Query String of Request "
+        },
+        "WAFSizeBody": {
+          "default": "Max Size for Body of Request"
+        },
+        "WAFAllowedURIs": {
+          "default": "List of allowed URIs through a WAF. List is delimetted by comma"
         }
       }
     }
   },
-
-
   "Parameters": {
     "SqlInjectionProtectionParam": {
       "Type": "String",
@@ -100,6 +116,18 @@
       "AllowedValues": ["yes", "no"],
       "Description": "Choose yes to enable the component designed to block bad bots and content scrapers."
     },
+    "ActivateSizeProtectionParam": {
+      "Type": "String",
+      "Default": "yes",
+      "AllowedValues": ["yes", "no"],
+      "Description": "Choose yes to enable the component designed to block size limit exceeded requests."
+    },
+    "ActivateURIsProtectionParam": {
+      "Type": "String",
+      "Default": "yes",
+      "AllowedValues": ["yes", "no"],
+      "Description": "Choose yes to enable the component designed to block not Whitelisted URIs in requests."
+    },
     "CloudFrontAccessLogBucket": {
       "Type": "String",
       "Default": "",
@@ -123,12 +151,60 @@
     },
     "WAFBlockPeriod": {
       "Type": "Number",
-      "Default": "240",
+      "Default": "600",
       "Description": "If you chose yes for the Activate HTTP Flood Protection or Activate Scanners & Probes Protection parameters, enter the period (in minutes) to block applicable IP addresses. If you chose to deactivate both types of protection, ignore this parameter."
+    },
+    "WAFAllowedURIs": {
+      "Type": "String",
+      "Default": "",
+      "Description": "If you chose yes for the Activate Specific URIs Protection parameters, enter the period (in minutes) to block applicable IP addresses. If you chose to deactivate both types of protection, ignore this parameter."
+    },
+    "WAFSizeURI": {
+      "Type": "String",
+      "Default": "1024",
+      "Description": "If you chose yes for the Activate Size Protection, enter the  the size (in bytes) limit for the URI of a Request.",
+      "AllowedValues": [
+        "8192",
+        "7168",
+        "6144",
+        "5120",
+        "4096",
+        "3072",
+        "2048",
+        "1024"
+      ]
+    },
+    "WAFSizeQuery": {
+      "Type": "String",
+      "Default": "1024",
+      "Description": "If you chose yes for the Activate Size Protection, enter the  the size (in bytes) limit for the Query String of a Request (The part of a URL that appears after a ? character) .",
+      "AllowedValues": [
+        "8192",
+        "7168",
+        "6144",
+        "5120",
+        "4096",
+        "3072",
+        "2048",
+        "1024"
+      ]
+    },
+    "WAFSizeBody": {
+      "Type": "String",
+      "Default": "4096",
+      "Description": "If you chose yes for the Activate Size Protection, enter the  size (in bytes) limit for the Body of a Request.",
+      "AllowedValues": [
+        "8192",
+        "7168",
+        "6144",
+        "5120",
+        "4096",
+        "3072",
+        "2048",
+        "1024"
+      ]
     }
   },
-
-
   "Conditions": {
     "SqlInjectionProtectionActivated": {
       "Fn::Equals": [{
@@ -160,6 +236,16 @@
         "Ref": "ActivateBadBotProtectionParam"
       }, "yes"]
     },
+    "SizeProtectionActivated": {
+      "Fn::Equals": [{
+        "Ref": "ActivateSizeProtectionParam"
+      }, "yes"]
+    },
+    "SpecificURIsProtectionActivated": {
+      "Fn::Equals": [{
+        "Ref": "ActivateURIsProtectionParam"
+      }, "yes"]
+    },
     "LogParserActivated": {
       "Fn::Or": [{
         "Condition": "HttpFloodProtectionActivated"
@@ -178,76 +264,113 @@
         "Condition": "ReputationListsProtectionActivated"
       }, {
         "Condition": "BadBotProtectionActivated"
+      }, {
+        "Condition": "SizeProtectionActivated"
+      }, {
+        "Condition": "SpecificURIsProtectionActivated"
       }]
     }
   },
-
-
   "Resources": {
     "WAFWhitelistSet": {
       "Type": "AWS::WAF::IPSet",
       "Condition": "CreateWebACL",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Whitelist Set"]]
-        }
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Whitelist Set"]]}
       }
     },
     "WAFBlacklistSet": {
       "Type": "AWS::WAF::IPSet",
       "Condition": "LogParserActivated",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Blacklist Set"]]
-        }
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Blacklist Set"]]}
       }
     },
     "WAFAutoBlockSet": {
       "Type": "AWS::WAF::IPSet",
       "Condition": "LogParserActivated",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Auto Block Set"]]
-        }
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Auto Block Set"]]}
       }
     },
     "WAFReputationListsSet1": {
       "Type": "AWS::WAF::IPSet",
       "Condition": "ReputationListsProtectionActivated",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "IP Reputation Lists Set #1"]]
-        }
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "IP Reputation Lists Set #1"]]}
       }
     },
     "WAFReputationListsSet2": {
       "Type": "AWS::WAF::IPSet",
       "Condition": "ReputationListsProtectionActivated",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "IP Reputation Lists Set #2"]]
-        }
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "IP Reputation Lists Set #2"]]}
       }
     },
     "WAFBadBotSet": {
       "Type": "AWS::WAF::IPSet",
       "Condition": "BadBotProtectionActivated",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "IP Bad Bot Set"]]
-        }
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "IP Bad Bot Set"]]}
+      }
+    },
+    "WAFSizeCondition": {
+      "Type": "AWS::WAF::SizeConstraintSet",
+      "Condition": "SizeProtectionActivated",
+      "Properties": {
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Size Limit Protection"]]},
+        "SizeConstraints": [
+          {
+            "ComparisonOperator": "GT",
+            "FieldToMatch": {
+              "Type": "QUERY_STRING"
+            },            
+            "Size": {
+              "Ref": "WAFSizeQuery"
+            },
+            "TextTransformation": "NONE"
+          },
+          {
+            "ComparisonOperator": "GT",
+            "FieldToMatch": {
+              "Type": "URI"
+            },            
+            "Size": {
+              "Ref": "WAFSizeURI"
+            },
+            "TextTransformation": "NONE"
+          },
+          {
+            "ComparisonOperator": "GT",
+            "FieldToMatch": {
+              "Type": "BODY"
+            },            
+            "Size": {
+              "Ref": "WAFSizeBody"
+            },
+            "TextTransformation": "NONE"
+          }
+        ]
+      }
+    },
+    "WAFURIsCondition": {
+      "Type": "AWS::WAF::ByteMatchSet",
+      "Condition": "SpecificURIsProtectionActivated",
+      "Properties": {
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "URIs Match Detection"]]},
+        "ByteMatchTuples": [
+          {
+            "FieldToMatch" : {
+              "Type": "URI",
+              "Data": ""
+            },
+            "TargetString" : {
+              "Ref": "WAFAllowedURIs"
+            },
+            "TextTransformation" : "NONE",
+            "PositionalConstraint" : "STARTS_WITH"
+          }
+        ]
       }
     },
     "WAFSqlInjectionDetection": {
@@ -256,40 +379,46 @@
       "Properties": {
         "Name": {
           "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "SQL injection Detection"]]
+           "Ref": "AWS::StackName"}, "SQL injection Detection"]]
         },
-        "SqlInjectionMatchTuples": [{
-          "FieldToMatch": {
-            "Type": "QUERY_STRING"
+        "SqlInjectionMatchTuples": [
+          {
+            "FieldToMatch": {
+              "Type": "QUERY_STRING"
+            },
+            "TextTransformation": "URL_DECODE"
           },
-          "TextTransformation": "URL_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "QUERY_STRING"
+          {
+            "FieldToMatch": {
+              "Type": "QUERY_STRING"
+            },
+            "TextTransformation": "HTML_ENTITY_DECODE"
           },
-          "TextTransformation": "HTML_ENTITY_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "BODY"
+          {
+            "FieldToMatch": {
+              "Type": "BODY"
+            },
+            "TextTransformation": "URL_DECODE"
           },
-          "TextTransformation": "URL_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "BODY"
+          {
+            "FieldToMatch": {
+              "Type": "BODY"
+            },
+            "TextTransformation": "HTML_ENTITY_DECODE"
           },
-          "TextTransformation": "HTML_ENTITY_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "URI"
+          {
+            "FieldToMatch": {
+              "Type": "URI"
+            },
+            "TextTransformation": "URL_DECODE"
           },
-          "TextTransformation": "URL_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "URI"
-          },
-          "TextTransformation": "HTML_ENTITY_DECODE"
-        }]
+          {
+            "FieldToMatch": {
+              "Type": "URI"
+            },
+            "TextTransformation": "HTML_ENTITY_DECODE"
+          }
+        ]
       }
     },
     "WAFXssDetection": {
@@ -298,40 +427,47 @@
       "Properties": {
         "Name": {
           "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "XSS Detection Detection"]]
+           "Ref": "AWS::StackName"
+         }, "XSS Detection Detection"]]
         },
-        "XssMatchTuples": [{
-          "FieldToMatch": {
-            "Type": "QUERY_STRING"
+        "XssMatchTuples": [
+          {
+            "FieldToMatch": {
+              "Type": "QUERY_STRING"
+            },
+            "TextTransformation": "URL_DECODE"
           },
-          "TextTransformation": "URL_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "QUERY_STRING"
+          {
+            "FieldToMatch": {
+              "Type": "QUERY_STRING"
+            },
+            "TextTransformation": "HTML_ENTITY_DECODE"
           },
-          "TextTransformation": "HTML_ENTITY_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "BODY"
+          {
+            "FieldToMatch": {
+              "Type": "BODY"
+            },
+            "TextTransformation": "URL_DECODE"
           },
-          "TextTransformation": "URL_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "BODY"
+          {
+            "FieldToMatch": {
+              "Type": "BODY"
+            },
+            "TextTransformation": "HTML_ENTITY_DECODE"
           },
-          "TextTransformation": "HTML_ENTITY_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "URI"
+          {
+            "FieldToMatch": {
+              "Type": "URI"
+            },
+            "TextTransformation": "URL_DECODE"
           },
-          "TextTransformation": "URL_DECODE"
-        }, {
-          "FieldToMatch": {
-            "Type": "URI"
-          },
-          "TextTransformation": "HTML_ENTITY_DECODE"
-        }]
+          {
+            "FieldToMatch": {
+              "Type": "URI"
+            },
+            "TextTransformation": "HTML_ENTITY_DECODE"
+          }
+        ]
       }
     },
     "WAFWhitelistRule": {
@@ -339,11 +475,7 @@
       "Condition": "CreateWebACL",
       "DependsOn": "WAFWhitelistSet",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Whitelist Rule"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Whitelist Rule"]]},
         "MetricName": "SecurityAutomationsWhitelistRule",
         "Predicates": [{
           "DataId": {
@@ -359,11 +491,7 @@
       "Condition": "LogParserActivated",
       "DependsOn": "WAFBlacklistSet",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Blacklist Rule"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Blacklist Rule"]]},
         "MetricName": "SecurityAutomationsBlacklistRule",
         "Predicates": [{
           "DataId": {
@@ -379,11 +507,7 @@
       "Condition": "LogParserActivated",
       "DependsOn": "WAFAutoBlockSet",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Auto Block Rule"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Auto Block Rule"]]},
         "MetricName": "SecurityAutomationsAutoBlockRule",
         "Predicates": [{
           "DataId": {
@@ -399,11 +523,7 @@
       "Condition": "ReputationListsProtectionActivated",
       "DependsOn": "WAFReputationListsSet1",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "WAF IP Reputation Lists Rule #1"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "WAF IP Reputation Lists Rule #1"]]},
         "MetricName": "SecurityAutomationsIPReputationListsRule1",
         "Predicates": [{
           "DataId": {
@@ -419,11 +539,7 @@
       "Condition": "ReputationListsProtectionActivated",
       "DependsOn": "WAFReputationListsSet2",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "WAF IP Reputation Lists Rule #2"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "WAF IP Reputation Lists Rule #2"]]},
         "MetricName": "SecurityAutomationsIPReputationListsRule2",
         "Predicates": [{
           "DataId": {
@@ -439,11 +555,7 @@
       "Condition": "BadBotProtectionActivated",
       "DependsOn": "WAFBadBotSet",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "Bad Bot Rule"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Bad Bot Rule"]]},
         "MetricName": "SecurityAutomationsBadBotRule",
         "Predicates": [{
           "DataId": {
@@ -454,16 +566,48 @@
         }]
       }
     },
+    "WAFURIsRule": {
+      "Type": "AWS::WAF::Rule",
+      "Condition": "SpecificURIsProtectionActivated",
+      "DependsOn": "WAFURIsCondition",
+      "Properties": {
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "URIs Rule"]]},
+        "MetricName": "SecurityAutomationsURIsRule",
+        "Predicates": [
+          {
+            "DataId": {
+              "Ref": "WAFURIsCondition"
+            },
+            "Negated": true,
+            "Type": "ByteMatch"
+          }
+        ]
+      }
+    },
+    "WAFSizeRule": {
+      "Type": "AWS::WAF::Rule",
+      "Condition": "SizeProtectionActivated",
+      "DependsOn": "WAFSizeCondition",
+      "Properties": {
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Size Rule"]]},
+        "MetricName": "SecurityAutomationsSizeRule",
+        "Predicates": [
+          {
+            "DataId": {
+              "Ref": "WAFSizeCondition"
+            },
+            "Negated": false,
+            "Type": "SizeConstraint"
+          }
+        ]
+      }
+    },
     "WAFSqlInjectionRule": {
       "Type": "AWS::WAF::Rule",
       "Condition": "SqlInjectionProtectionActivated",
       "DependsOn": "WAFSqlInjectionDetection",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "SQL Injection Rule"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "SQL Injection Rule"]]},
         "MetricName": "SecurityAutomationsSqlInjectionRule",
         "Predicates": [{
           "DataId": {
@@ -479,11 +623,7 @@
       "Condition": "CrossSiteScriptingProtectionActivated",
       "DependsOn": "WAFXssDetection",
       "Properties": {
-        "Name": {
-          "Fn::Join": [" - ", [{
-            "Ref": "AWS::StackName"
-          }, "XSS Rule"]]
-        },
+        "Name": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "XSS Rule"]]},
         "MetricName": "SecurityAutomationsXssRule",
         "Predicates": [{
           "DataId": {
@@ -1256,14 +1396,7 @@
       "Condition": "CreateWebACL",
       "DependsOn": "LambdaRoleCustomResource",
       "Properties": {
-        "Description": {
-          "Fn::Join": ["", [
-            "This lambda function configures the Web ACL rules based on the features enabled in the CloudFormation template. Parameters: ", {
-              "Ref": "SendAnonymousUsageData"
-            },
-            "."
-          ]]
-        },
+        "Description": {"Fn::Join": [" - ", [{"Ref": "AWS::StackName"}, "Custom Resource Function"]]},
         "Handler": "custom-resource.lambda_handler",
         "Role": {
           "Fn::GetAtt": ["LambdaRoleCustomResource", "Arn"]
@@ -1367,6 +1500,20 @@
             "Ref": "AWS::NoValue"
           }]
         },
+        "WAFURIsRule": {
+          "Fn::If": ["SpecificURIsProtectionActivated", {
+            "Ref": "WAFURIsRule"
+          }, {
+            "Ref": "AWS::NoValue"
+          }]
+        },
+        "WAFSizeRule": {
+          "Fn::If": ["SizeProtectionActivated", {
+            "Ref": "WAFSizeRule"
+          }, {
+            "Ref": "AWS::NoValue"
+          }]
+        },
         "WAFSqlInjectionRule": {
           "Fn::If": ["SqlInjectionProtectionActivated", {
             "Ref": "WAFSqlInjectionRule"
@@ -1382,38 +1529,56 @@
           }]
         },
         "SqlInjectionProtection": {
-          "Ref": "SqlInjectionProtectionParam"
+            "Ref": "SqlInjectionProtectionParam"
         },
         "CrossSiteScriptingProtection": {
-          "Ref": "CrossSiteScriptingProtectionParam"
+            "Ref": "CrossSiteScriptingProtectionParam"
         },
         "ActivateHttpFloodProtection": {
-          "Ref": "ActivateHttpFloodProtectionParam"
+            "Ref": "ActivateHttpFloodProtectionParam"
         },
         "ActivateScansProbesProtection": {
-          "Ref": "ActivateScansProbesProtectionParam"
+            "Ref": "ActivateScansProbesProtectionParam"
         },
         "ActivateReputationListsProtection": {
-          "Ref": "ActivateReputationListsProtectionParam"
+            "Ref": "ActivateReputationListsProtectionParam"
         },
         "ActivateBadBotProtection": {
-          "Ref": "ActivateBadBotProtectionParam"
+            "Ref": "ActivateBadBotProtectionParam"
+        },
+        "ActivateSizeProtection": {
+            "Ref": "ActivateSizeProtectionParam"
+        },
+        "ActivateURIsProtection": {
+            "Ref": "ActivateURIsProtectionParam"
         },
         "RequestThreshold": {
-          "Ref": "RequestThreshold"
+            "Ref": "RequestThreshold"
         },
         "ErrorThreshold": {
-          "Ref": "ErrorThreshold"
+            "Ref": "ErrorThreshold"
         },
         "WAFBlockPeriod": {
-          "Ref": "WAFBlockPeriod"
+            "Ref": "WAFBlockPeriod"
+        },
+        "WAFSizeURI": {
+            "Ref": "WAFSizeURI"
+        },
+        "WAFSizeQuery": {
+            "Ref": "WAFSizeQuery"
+        },
+        "WAFSizeBody": {
+            "Ref": "WAFSizeBody"
+        },
+        "WAFAllowedURIs": {
+            "Ref": "WAFAllowedURIs"
         },
         "SendAnonymousUsageData": {
-          "Ref": "SendAnonymousUsageData"
-        },
+            "Ref": "SendAnonymousUsageData"
+        },        
         "UUID": {
-          "Fn::GetAtt": ["CreateUniqueID", "UUID"]
-        }
+            "Fn::GetAtt": ["CreateUniqueID", "UUID"]
+        }        
       }
     },
     "SolutionHelperRole": {
@@ -1547,6 +1712,18 @@
         "Ref": "ActivateBadBotProtectionParam"
       }
     },
+    "ActivateSizeProtection": {
+      "Description": "Activate Size Protection",
+      "Value": {
+        "Ref": "ActivateSizeProtectionParam"
+      }
+    },
+    "ActivateURIsProtection": {
+      "Description": "Activate Specific URIs Protection",
+      "Value": {
+        "Ref": "ActivateURIsProtectionParam"
+      }
+    },
     "RequestThreshold": {
       "Description": "Request Threshold",
       "Value": {
@@ -1626,14 +1803,50 @@
         "Ref": "SendAnonymousUsageData"
       }
     },
-    "UUID": {
-      "Description": "Newly created random UUID.",
+    "WAFSizeCondition": {
+      "Description": "Size Condition ID",
       "Value": {
-        "Fn::GetAtt": [
-          "CreateUniqueID",
-          "UUID"
-        ]
+        "Ref": "WAFSizeCondition"
       }
+    },
+    "WAFSizeRule": {
+      "Description": "Size Rule ID",
+      "Value": {
+        "Ref": "WAFSizeRule"
+      }
+    },
+    "WAFSizeURI": {
+      "Description": "Size of URI",
+      "Value": {
+        "Ref": "WAFSizeURI"
+      }
+    },
+    "WAFSizeQuery": {
+      "Description": "Size of Query",
+      "Value": {
+        "Ref": "WAFSizeQuery"
+      }
+    },
+    "WAFSizeBody": {
+      "Description": "Size of Body",
+      "Value": {
+        "Ref": "WAFSizeBody"
+      }
+    },
+    "WAFAllowedURIs": {
+      "Description": "Allowed URI",
+      "Value": {
+        "Ref": "WAFAllowedURIs"
+      }
+    },
+    "UUID": {
+        "Description": "Newly created random UUID.",
+        "Value": {
+            "Fn::GetAtt": [
+                "CreateUniqueID",
+                "UUID"
+            ]
+        }
     }
   }
 }

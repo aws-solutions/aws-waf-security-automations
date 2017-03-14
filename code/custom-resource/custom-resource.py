@@ -218,11 +218,31 @@ def create_stack(resource_properties):
             }
         })
 
-    if 'WAFSqlInjectionRule' in resource_properties:
+    if 'WAFURIsRule' in resource_properties:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 70,
+                'RuleId': resource_properties['WAFURIsRule'],
+                'Action': {'Type': 'BLOCK'}
+            }
+        })
+
+    if 'WAFSizeRule' in resource_properties:
+        updates.append({
+            'Action': 'INSERT',
+            'ActivatedRule': {
+                'Priority': 80,
+                'RuleId': resource_properties['WAFSizeRule'],
+                'Action': {'Type': 'BLOCK'}
+            }
+        })
+
+    if 'WAFSqlInjectionRule' in resource_properties:
+        updates.append({
+            'Action': 'INSERT',
+            'ActivatedRule': {
+                'Priority': 90,
                 'RuleId': resource_properties['WAFSqlInjectionRule'],
                 'Action': {'Type': 'BLOCK'}
             }
@@ -232,7 +252,7 @@ def create_stack(resource_properties):
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
-                'Priority': 80,
+                'Priority': 100,
                 'RuleId': resource_properties['WAFXssRule'],
                 'Action': {'Type': 'BLOCK'}
             }
