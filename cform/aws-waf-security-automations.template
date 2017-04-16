@@ -645,8 +645,9 @@ Resources:
           Statement:
           - Effect: Allow
             Action: lambda:InvokeFunction
-            Resource: !Join ['', ['arn:aws:lambda:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId',
-                ':function:', !Ref 'AWS::StackName', -LambdaWAFReputationLists*]]
+            Resource: !If [ReputationListsProtectionActivated,
+              !GetAtt [LambdaWAFReputationListsParserFunction, Arn], !Join ['', ['arn:aws:lambda:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId',
+                ':function:', !Ref 'AWS::StackName', -LambdaWAFReputationLists*]]]
       - PolicyName: WAFAccess
         PolicyDocument:
           Version: '2012-10-17'
