@@ -432,7 +432,7 @@ def lambda_handler(event, context):
     responseData = {}
     try:
         cf = boto3.client('cloudformation')
-        stack_name = context.invoked_function_arn.split(':')[6].rsplit('-', 2)[0]
+        stack_name = event['ResourceProperties']['StackName']
         cf_desc = cf.describe_stacks(StackName=stack_name)
 
         request_type = event['RequestType'].upper()

@@ -1291,6 +1291,9 @@
         "ServiceToken": {
           "Fn::GetAtt": ["LambdaWAFCustomResourceFunction", "Arn"]
         },
+        "StackName": {
+          "Ref": "AWS::StackName"
+        },
         "WAFWebACL": {
           "Ref": "WAFWebACL"
         },
@@ -1575,6 +1578,13 @@
       },
       "Condition": "LogParserActivated"
     },
+    "WhitelistIPSetID": {
+      "Description": "Whitelist IP Set ID",
+      "Value": {
+        "Ref": "WAFWhitelistSet"
+      },
+      "Condition": "LogParserActivated"
+    },
     "AutoBlockIPSetID": {
       "Description": "Auto Block IP Set ID",
       "Value": {
@@ -1625,6 +1635,13 @@
       "Value": {
         "Ref": "SendAnonymousUsageData"
       }
+    },
+    "WAFWebACLID": {
+      "Description": "Web ACL ID",
+      "Value": {
+        "Ref": "WAFWebACL"
+      },
+      "Condition": "CreateWebACL"
     },
     "UUID": {
       "Description": "Newly created random UUID.",
