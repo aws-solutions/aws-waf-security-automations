@@ -433,9 +433,7 @@ def lambda_handler(event, context):
     responseData = {}
     try:
         cf = boto3.client('cloudformation')
-        stack_name = os.environ.get('StackName')
-
-        print "stack_name: %s" % stack_name
+        stack_name = os.environ['StackName']
 
         cf_desc = cf.describe_stacks(StackName=stack_name)
 
