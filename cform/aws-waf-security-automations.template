@@ -1319,9 +1319,6 @@
         "ServiceToken": {
           "Fn::GetAtt": ["LambdaWAFCustomResourceFunction", "Arn"]
         },
-        "StackName": {
-          "Ref": "AWS::StackName"
-        },
         "WAFWebACL": {
           "Ref": "WAFWebACL"
         },
