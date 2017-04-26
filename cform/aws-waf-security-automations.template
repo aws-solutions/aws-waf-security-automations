@@ -686,7 +686,14 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "512",
-        "Timeout": "300"
+        "Timeout": "300",
+        "Environment": {
+          "Variables": {
+            "StackName": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        }
       }
     },
     "LambdaInvokePermissionLogParser": {
@@ -834,7 +841,14 @@
         },
         "Runtime": "nodejs4.3",
         "MemorySize": "128",
-        "Timeout": "300"
+        "Timeout": "300",
+        "Environment": {
+          "Variables": {
+            "StackName": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        }
       }
     },
     "LambdaWAFReputationListsParserEventsRule": {
@@ -1009,7 +1023,14 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "128",
-        "Timeout": "300"
+        "Timeout": "300",
+        "Environment": {
+          "Variables": {
+            "StackName": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        }
       }
     },
     "LambdaInvokePermissionBadBot": {
@@ -1280,7 +1301,14 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "128",
-        "Timeout": "300"
+        "Timeout": "300",
+        "Environment": {
+          "Variables": {
+            "StackName": {
+              "Ref": "AWS::StackName"
+            }
+          }
+        }
       }
     },
     "WafWebAclRuleControler": {

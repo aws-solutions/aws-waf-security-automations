@@ -17,6 +17,7 @@ import requests
 import datetime
 from urllib2 import Request
 from urllib2 import urlopen
+import os
 
 print('Loading function')
 
@@ -432,7 +433,10 @@ def lambda_handler(event, context):
     responseData = {}
     try:
         cf = boto3.client('cloudformation')
-        stack_name = event['ResourceProperties']['StackName']
+        stack_name = os.environ.get('StackName')
+
+        print "stack_name: %s" % stack_name
+
         cf_desc = cf.describe_stacks(StackName=stack_name)
 
         request_type = event['RequestType'].upper()
