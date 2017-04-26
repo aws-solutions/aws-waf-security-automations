@@ -1,6 +1,6 @@
 # aws-waf-security-automations
 
-The [WAS WAF Security Automations](https://aws.amazon.com/answers/security/aws-waf-security-automations/) is a simple AWS-provided solution that helps you provision the AWS WAF Security Automations stack without worrying about creating and configuring the underlying AWS infrastructure. WARNING: This template creates an AWS Lambda function, an AWS WAF Web ACL, an Amazon S3 bucket, and an Amazon CloudWatch custom metric. You will be billed for the AWS resources used if you create a stack from this template.
+The [AWS WAF Security Automations](https://aws.amazon.com/answers/security/aws-waf-security-automations/) is a simple AWS-provided solution that helps you provision the AWS WAF Security Automations stack without worrying about creating and configuring the underlying AWS infrastructure. WARNING: This template creates an AWS Lambda function, an AWS WAF Web ACL, an Amazon S3 bucket, and an Amazon CloudWatch custom metric. You will be billed for the AWS resources used if you create a stack from this template.
 
 Source code for the AWS solution "WAS WAF Security Automations".
 
