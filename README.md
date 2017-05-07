@@ -6,7 +6,7 @@ Source code for the AWS solution "WAS WAF Security Automations".
 
 ## Cloudformation templates
 
-- cform/ec2-scheduler.template
+- cform/aws-waf-security-automations.template
 
 ## log-parser
 
