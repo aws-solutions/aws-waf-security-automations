@@ -13,6 +13,7 @@ import math
 import time
 import json
 import datetime
+import os
 from urllib2 import Request
 from urllib2 import urlopen
 
@@ -224,7 +225,7 @@ def lambda_handler(event, context):
         if (IP_SET_ID_BAD_BOT == None or SEND_ANONYMOUS_USAGE_DATA == None or UUID == None):
             outputs = {}
             cf = boto3.client('cloudformation')
-            stack_name = context.invoked_function_arn.split(':')[6].rsplit('-', 2)[0]
+            stack_name = stack_name = os.environ['StackName']
             cf_desc = cf.describe_stacks(StackName=stack_name)
             for e in cf_desc['Stacks'][0]['Outputs']:
                 outputs[e['OutputKey']] = e['OutputValue']

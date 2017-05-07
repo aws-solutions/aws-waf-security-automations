@@ -259,15 +259,7 @@ function send_anonymous_usage_data(event, context) {
         // 0 - get reputation_ip_set_size
         function(callback) {
             // get stack name
-            var stack_name = context.functionName;
-            stack_name = stack_name.split("-");
-            stack_name.pop();
-            stack_name.pop();
-            if (stack_name.length > 1) {
-                stack_name = stack_name.join("-");
-            } else {
-                stack_name = stack_name[0];
-            }
+            var stack_name = process.env.StackName;
 
             cloudformation.describeStacks({
                 StackName: stack_name
