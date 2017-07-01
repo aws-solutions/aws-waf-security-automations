@@ -15,6 +15,7 @@ import math
 import time
 import requests
 import datetime
+import os
 from urllib2 import Request
 from urllib2 import urlopen
 
@@ -444,7 +445,7 @@ def lambda_handler(event, context):
     responseData = {}
     try:
         cf = boto3.client('cloudformation')
-        stack_name = context.invoked_function_arn.split(':')[6].rsplit('-', 2)[0]
+        stack_name = os.environ['STACK_NAME']
         cf_desc = cf.describe_stacks(StackName=stack_name)
 
         global waf

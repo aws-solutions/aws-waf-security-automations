@@ -269,41 +269,6 @@ function send_anonymous_usage_data(event, context) {
     async.parallel([
         // 0 - get reputation_ip_set_size
         function(callback) {
-            // get stack name
-            var stack_name = context.functionName;
-            stack_name = stack_name.split("-");
-            stack_name.pop();
-            stack_name.pop();
-            if (stack_name.length > 1) {
-                stack_name = stack_name.join("-");
-            } else {
-                stack_name = stack_name[0];
-            }
-
-            cloudformation.describeStacks({
-                StackName: stack_name
-            }, function(err, data) {
-                var uuid = "";
-                var send_anonymous_usage_data = "";
-                if (err) {
-                    console.error('Error getting UUID', err);
-                } else {
-                    data.Stacks[0].Outputs.forEach(function(output, index) {
-                        if (output.OutputKey === "UUID") {
-                            uuid = output.OutputValue;
-                        } else if (output.OutputKey === "SendAnonymousUsageData") {
-                            send_anonymous_usage_data = output.OutputValue;
-                        }
-                    });
-                }
-                if (send_anonymous_usage_data !== "yes") {
-                    uuid = "";
-                }
-                callback(err, uuid);
-            });
-        },
-        // 1 - get reputation_ip_set_size
-        function(callback) {
             async.map(event.ipSetIds, function(IPSetId, callback) {
                 waf.getIPSet({
                     IPSetId: IPSetId
@@ -322,7 +287,7 @@ function send_anonymous_usage_data(event, context) {
                 callback(err, reputation_ip_set_size);
             });
         },
-        // 2 - get allowed_requests
+        // 1 - get allowed_requests
         function(callback) {
             var end_time = new Date();
             var start_time = new Date();
@@ -356,7 +321,7 @@ function send_anonymous_usage_data(event, context) {
                 }
             });
         },
-        // 3 - get blocked_requests_all
+        // 2 - get blocked_requests_all
         function(callback) {
             var end_time = new Date();
             var start_time = new Date();
@@ -390,7 +355,7 @@ function send_anonymous_usage_data(event, context) {
                 }
             });
         },
-        // 4 - get blocked_requests_ip_reputation_lists1
+        // 3 - get blocked_requests_ip_reputation_lists1
         function(callback) {
             var end_time = new Date();
             var start_time = new Date();
@@ -424,7 +389,7 @@ function send_anonymous_usage_data(event, context) {
                 }
             });
         },
-        // 5 - get blocked_requests_ip_reputation_lists2
+        // 4 - get blocked_requests_ip_reputation_lists2
         function(callback) {
             var end_time = new Date();
             var start_time = new Date();
@@ -462,18 +427,23 @@ function send_anonymous_usage_data(event, context) {
         if (err) {
             console.error('Error getting anonymous usage data', err);
         } else {
-            if (result[0] !== "") {
+            var uuid = "";
+            if (process.env.SEND_ANONYMOUS_USAGE_DATA == "yes") {
+                uuid = process.env.UUID;
+            }
+
+            if (uuid !== "") {
                 var usage_data = JSON.stringify({
                     "Solution": "SO0006",
-                    "UUID": result[0],
+                    "UUID": uuid,
                     "TimeStamp": new Date(),
                     "Data": {
                         "Version": "2",
                         "data_type": "reputation_list",
-                        "ip_reputation_lists_size": result[1],
-                        "allowed_requests": result[2],
-                        "blocked_requests_all": result[3],
-                        "blocked_requests_ip_reputation_lists": (result[4] + result[5]),
+                        "ip_reputation_lists_size": result[0],
+                        "allowed_requests": result[1],
+                        "blocked_requests_all": result[2],
+                        "blocked_requests_ip_reputation_lists": (result[3] + result[4]),
                         "waf_type": event.logType
                     }
                 });

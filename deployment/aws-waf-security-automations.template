@@ -842,7 +842,17 @@
         },
         "Runtime": "nodejs6.10",
         "MemorySize": "128",
-        "Timeout": "300"
+        "Timeout": "300",
+        "Environment":{
+          "Variables":{
+            "SEND_ANONYMOUS_USAGE_DATA": {
+              "Ref": "SendAnonymousUsageData"
+            },
+            "UUID": {
+              "Fn::GetAtt": ["CreateUniqueID", "UUID"]
+            }
+          }
+        }
       }
     },
     "LambdaWAFReputationListsParserEventsRule": {
@@ -1337,7 +1347,14 @@
         },
         "Runtime": "python2.7",
         "MemorySize": "128",
-        "Timeout": "300"
+        "Timeout": "300",
+        "Environment":{
+          "Variables":{
+            "STACK_NAME": {
+              "Ref":"AWS::StackName"
+            }
+          }
+        }
       }
     },
     "WafWebAclRuleControler": {
