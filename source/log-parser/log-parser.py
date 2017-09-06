@@ -542,7 +542,7 @@ def lambda_handler(event, context):
         key_name = urllib.unquote_plus(event['Records'][0]['s3']['object']['key']).decode('utf8')
 
         if key_name == OUTPUT_FILE_NAME:
-            print("[lambda_handler] \tIgnore processinf output file")
+            print("[lambda_handler] \tIgnore processing output file")
             return
 
         global waf
