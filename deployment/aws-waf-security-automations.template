@@ -1062,6 +1062,7 @@
     },
     "ApiGatewayBadBotResource": {
       "Type": "AWS::ApiGateway::Resource",
+      "Condition": "BadBotProtectionActivated",
       "Properties": {
         "RestApiId": {
           "Ref": "ApiGatewayBadBot"
