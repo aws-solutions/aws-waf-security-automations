@@ -4,14 +4,17 @@ A solution that contains all AWS WAF samples developed so far - waf-reactive-bla
 ## Building Lambda Package
 ```bash
 cd deployment
-./build-s3-dist.sh source-bucket-base-name
+./build-s3-dist.sh 
 ```
-source-bucket-base-name should be the base name for the S3 bucket location where the template will source the Lambda code from. 
+Create a source-bucket-base-name  as the base name for the S3 bucket location where the template will source the Lambda code from. 
 The template will append '-[region_name]' to this value.
-For example: ./build-s3-dist.sh solutions
 The template will then expect the source code to be located in the solutions-[region_name] bucket
+Enter value of bucket name (without -region_name suffix) in template parameter BucketName.
 
-## CF template and Lambda function
+## CloudFormation Templates (in yaml & json formats):
+Located in deployment 
+
+## Zipped up Lambda function:
 Located in deployment/dist
 
 ***
