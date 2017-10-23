@@ -182,6 +182,7 @@ def merge_current_blocked_requesters(key_name, outstanding_requesters):
 
                     else:
                         prev_updated_at = datetime.datetime.strptime(v['updated_at'], "%Y-%m-%d %H:%M:%S")
+                        prev_updated_at = prev_updated_at.replace(tzinfo=response['LastModified'].tzinfo)
                         total_diff_min = ((now_timestamp - prev_updated_at).total_seconds())/60
                         if total_diff_min < int(environ['BLACKLIST_BLOCK_PERIOD']):
                             print("[merge_current_blocked_requesters] \t\tKeeping %s rule"%k)

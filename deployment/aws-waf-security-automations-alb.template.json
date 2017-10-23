@@ -122,6 +122,11 @@
       "Default": "50",
       "Description": "If you chose yes for the Activate Scanners & Probes Protection parameter, enter the maximum acceptable bad requests per minute per IP. If you chose to deactivate Scanners & Probes protection, ignore this parameter."
     },
+   "BucketName": {
+      "Type": "String",
+      "Default": "myBucket",
+      "Description": "Name of S3 bucket containing the Lambda zip files."
+    },
     "WAFBlockPeriod": {
       "Type": "Number",
       "Default": "240",
@@ -655,7 +660,7 @@
         "Code": {
           "S3Bucket": {
             "Fn::Join": ["-", [
-              "%%BUCKET_NAME%%", {
+              {"Ref": "BucketName"}, {
                 "Ref": "AWS::Region"
               }
             ]]
@@ -841,7 +846,7 @@
         "Code": {
           "S3Bucket": {
             "Fn::Join": ["-", [
-              "%%BUCKET_NAME%%", {
+              {"Ref": "BucketName"}, {
                 "Ref": "AWS::Region"
               }
             ]]
@@ -1021,7 +1026,7 @@
         "Code": {
           "S3Bucket": {
             "Fn::Join": ["-", [
-              "%%BUCKET_NAME%%", {
+              {"Ref": "BucketName"}, {
                 "Ref": "AWS::Region"
               }
             ]]
@@ -1072,6 +1077,7 @@
     },
     "ApiGatewayBadBotResource": {
       "Type": "AWS::ApiGateway::Resource",
+      "Condition": "BadBotProtectionActivated",
       "Properties": {
         "RestApiId": {
           "Ref": "ApiGatewayBadBot"
@@ -1342,7 +1348,7 @@
         "Code": {
           "S3Bucket": {
             "Fn::Join": ["-", [
-              "%%BUCKET_NAME%%", {
+              {"Ref": "BucketName"}, {
                 "Ref": "AWS::Region"
               }
             ]]
