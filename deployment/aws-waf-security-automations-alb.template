@@ -1584,6 +1584,12 @@
         ]]
       },
       "Condition": "BadBotProtectionActivated"
+    },
+    "WAFWebACLId": {
+      "Description": "The unique identifier (ID) for the web ACL",
+      "Value": {
+            "Ref": "WAFWebACL"
+      }
     }
   }
 }
