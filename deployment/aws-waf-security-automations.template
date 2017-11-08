@@ -1343,7 +1343,7 @@
     "WafWebAclRuleControler": {
       "Type": "Custom::WafWebAclRuleControler",
       "Condition": "CreateWebACL",
-      "DependsOn": ["LambdaWAFCustomResourceFunction", "WAFWebACL"],
+      "DependsOn": ["LambdaWAFCustomResourceFunction", "WAFWebACL", "LambdaRoleCustomResource"],
       "Properties": {
         "ServiceToken": {
           "Fn::GetAtt": ["LambdaWAFCustomResourceFunction", "Arn"]
