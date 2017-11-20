@@ -24,6 +24,9 @@ print('Loading function')
 # Constants
 #======================================================================================================================
 API_CALL_NUM_RETRIES = 3
+LIST_LIMIT  = 50
+BATCH_DELETE_LIMIT = 1000
+RULE_SUFIX_RATE_BASED = " - Http Flood Rule"
 
 waf = None
 
@@ -52,7 +55,7 @@ def update_web_acl(web_acl_id, updates):
 
 #==================================================================================================
 # Create a bucket (if not exist) and configure an event to call Log Parser lambda funcion when
-# new CloudFront access log file is created (and stored on this S3 bucket).
+# new Access log file is created (and stored on this S3 bucket).
 #
 # Its important to not that this function can raise exception when:
 # 01. The bucket name already exist
@@ -154,98 +157,271 @@ def remove_s3_bucket_lambda_event(bucket_name, lambda_function_arn):
         print(e)
         print("[ERROR] Error to remove S3 Bucket lambda event")
 
-def create_stack(resource_properties):
+def get_or_create_rate_based_rule(stack_name, resource_properties):
+    rule_id = ""
+
+    #--------------------------------------------------------------------------
+    # Get
+    #--------------------------------------------------------------------------
+    for attempt in range(API_CALL_NUM_RETRIES):
+        try:
+            keep_looking = True
+            response = waf.list_rate_based_rules(Limit=LIST_LIMIT)
+            while keep_looking:            
+                for rule in response['Rules']:
+                    if rule['Name'] == stack_name + RULE_SUFIX_RATE_BASED:
+                        rule_id = rule['RuleId']
+                        keep_looking = False
+                        break
+                
+                keep_looking = False
+                if len(response['Rules']) == LIST_LIMIT and 'NextMarker' in response:
+                    response = waf.list_rate_based_rules(NextMarker=response['NextMarker'], Limit=LIST_LIMIT)
+                    keep_looking = (len(response['Rules']) > 0)
+
+        except Exception, e:
+            print(e)
+            delay = math.pow(2, attempt)
+            print("[get_or_create_rate_based_rule] Retrying in %d seconds..." % (delay))
+            time.sleep(delay)
+        else:
+            break
+    else:
+        print("[get_or_create_rate_based_rule] Failed ALL attempts to call API")
+
+    #--------------------------------------------------------------------------
+    # Create Update List
+    #--------------------------------------------------------------------------
+    if rule_id == "":
+        for attempt in range(API_CALL_NUM_RETRIES):
+            try:
+                response = waf.create_rate_based_rule(
+                    Name = stack_name + RULE_SUFIX_RATE_BASED,
+                    MetricName='SecurityAutomationsHttpFloodRule',
+                    RateKey='IP',
+                    RateLimit=int(resource_properties['RequestThreshold'].replace(",","")),
+                    ChangeToken=waf.get_change_token()['ChangeToken']
+                )   
+
+                rule_id = response['Rule']['RuleId'].encode('utf8').strip()
+
+            except Exception, e:
+                print(e)
+                delay = math.pow(2, attempt)
+                print("[get_or_create_rate_based_rule] Retrying in %d seconds..." % (delay))
+                time.sleep(delay)
+            else:
+                break
+        else:
+            print("[get_or_create_rate_based_rule] Failed ALL attempts to call API")
+
+    return rule_id
+
+def delete_rate_based_rules(stack_name):
+    #--------------------------------------------------------------------------
+    # Create Update List
+    #--------------------------------------------------------------------------
+    for attempt in range(API_CALL_NUM_RETRIES):
+        try:
+            keep_looking = True
+            response = waf.list_rate_based_rules(Limit=LIST_LIMIT)
+            while keep_looking:            
+                for rule in response['Rules']:
+                    if rule['Name'] == stack_name + RULE_SUFIX_RATE_BASED:
+                        try:
+                            waf.delete_rate_based_rule(
+                                RuleId=rule['RuleId'],
+                                ChangeToken=waf.get_change_token()['ChangeToken']
+                            )
+                        except Exception as e:
+                            print("[delete_rate_based_rules] Failed to Delete '%s':'%s'." % (rule['Name'], rule['RuleId']))
+                
+                keep_looking = False
+                if len(response['Rules']) == LIST_LIMIT and 'NextMarker' in response:
+                    response = waf.list_rate_based_rules(NextMarker=response['NextMarker'], Limit=LIST_LIMIT)
+                    keep_looking = (len(response['Rules']) > 0)
+
+        except Exception, e:
+            print(e)
+            delay = math.pow(2, attempt)
+            print("[delete_rate_based_rules] Retrying in %d seconds..." % (delay))
+            time.sleep(delay)
+        else:
+            break
+    else:
+        print("[delete_rate_based_rules] Failed ALL attempts to call API")
+
+def clean_ip_set(ip_set_id):
+    print("[clean_ip_set] Clean IP Set %s"%ip_set_id)
+
+    for attempt in range(API_CALL_NUM_RETRIES):
+        try:
+            response = waf.get_ip_set(IPSetId=ip_set_id)        
+            while len(response['IPSet']['IPSetDescriptors']) > 0:
+                counter = 0
+                updates = []
+                for ip in response['IPSet']['IPSetDescriptors']:
+                    updates.append({
+                        'Action': 'DELETE',
+                        'IPSetDescriptor': {
+                            'Type': ip['Type'],
+                            'Value': ip['Value']
+                        }
+                    })
+                    counter += 1
+                    if counter >= BATCH_DELETE_LIMIT:
+                        break
+
+                print "[clean_ip_set] Deleting %d IPs..."%len(updates)
+                waf.update_ip_set(
+                    IPSetId=ip_set_id,
+                    ChangeToken=waf.get_change_token()['ChangeToken'],
+                    Updates=updates
+                )
+                response = waf.get_ip_set(IPSetId=ip_set_id)
+
+        except Exception, e:
+            print(e)
+            delay = math.pow(2, attempt)
+            print("[clean_ip_set] Error to clean IP Set %s. Retrying in %d seconds..."%ip_set_id, delay)
+            time.sleep(delay)
+        else:
+            break
+    else:
+        print("[clean_ip_set] Failed ALL attempts to call API")  
+
+def create_stack(stack_name, resource_properties):
     print("[create_stack] Start")
 
     #--------------------------------------------------------------------------
     # Configure S3 Bucket
     #--------------------------------------------------------------------------
-    if 'CloudFrontAccessLogBucket' in resource_properties:
+    if "AccessLogBucket" in resource_properties:
         configure_s3_bucket(resource_properties['Region'],
-            resource_properties['CloudFrontAccessLogBucket'],
+            resource_properties['AccessLogBucket'],
             resource_properties['LambdaWAFLogParserFunction'])
 
     #--------------------------------------------------------------------------
-    # Create Update List
+    # Get Current Rule List
+    #--------------------------------------------------------------------------
+    current_rules = []
+    for attempt in range(API_CALL_NUM_RETRIES):
+        try:
+            response = waf.get_web_acl(WebACLId=resource_properties['WAFWebACL'])
+            current_rules = [r['RuleId'].encode('utf8') for r in response['WebACL']['Rules']]
+
+        except Exception, e:
+            print(e)
+            delay = math.pow(2, attempt)
+            print("[create_stack] Retrying in %d seconds..." % (delay))
+            time.sleep(delay)
+        else:
+            break
+    else:
+        print("[create_stack] Failed ALL attempts to call API")
+
+    #--------------------------------------------------------------------------
+    # Update List
     #--------------------------------------------------------------------------
     updates = []
-    if 'WAFWhitelistRule' in resource_properties:
+    if 'WAFWhitelistRule' in resource_properties and resource_properties['WAFWhitelistRule'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 10,
                 'RuleId': resource_properties['WAFWhitelistRule'],
-                'Action': {'Type': 'ALLOW'}
+                'Action': {'Type': 'ALLOW'}, 
+                'Type': 'REGULAR'
             }
         })
 
-    if 'WAFBlacklistRule' in resource_properties:
+    if 'WAFBlacklistRule' in resource_properties and resource_properties['WAFBlacklistRule'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 20,
                 'RuleId': resource_properties['WAFBlacklistRule'],
-                'Action': {'Type': 'BLOCK'}
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
             }
         })
 
-    if 'WAFAutoBlockRule' in resource_properties:
-        updates.append({
-            'Action': 'INSERT',
-            'ActivatedRule': {
-                'Priority': 30,
-                'RuleId': resource_properties['WAFAutoBlockRule'],
-                'Action': {'Type': 'BLOCK'}
-            }
-        })
+    if resource_properties['ActivateHttpFloodProtection'] == "yes":
+        rbr_id = get_or_create_rate_based_rule(stack_name, resource_properties)
+        if rbr_id != "" and rbr_id not in current_rules:
+            updates.append({
+                'Action': 'INSERT',
+                'ActivatedRule': {
+                    'Priority': 30,
+                    'RuleId': rbr_id,
+                    'Action': {'Type': 'BLOCK'},
+                    'Type': 'RATE_BASED'
+                }
+            })
 
-    if 'WAFIPReputationListsRule1' in resource_properties:
+    if 'WAFScansProbesRule' in resource_properties and resource_properties['WAFScansProbesRule'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 40,
-                'RuleId': resource_properties['WAFIPReputationListsRule1'],
-                'Action': {'Type': 'BLOCK'}
+                'RuleId': resource_properties['WAFScansProbesRule'],
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
             }
         })
 
-    if 'WAFIPReputationListsRule2' in resource_properties:
+    if 'WAFIPReputationListsRule1' in resource_properties and resource_properties['WAFIPReputationListsRule1'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 50,
-                'RuleId': resource_properties['WAFIPReputationListsRule2'],
-                'Action': {'Type': 'BLOCK'}
+                'RuleId': resource_properties['WAFIPReputationListsRule1'],
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
             }
         })
 
-    if 'WAFBadBotRule' in resource_properties:
+    if 'WAFIPReputationListsRule2' in resource_properties and resource_properties['WAFIPReputationListsRule2'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 60,
-                'RuleId': resource_properties['WAFBadBotRule'],
-                'Action': {'Type': 'BLOCK'}
+                'RuleId': resource_properties['WAFIPReputationListsRule2'],
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
             }
         })
 
-    if 'WAFSqlInjectionRule' in resource_properties:
+    if 'WAFBadBotRule' in resource_properties and resource_properties['WAFBadBotRule'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 70,
-                'RuleId': resource_properties['WAFSqlInjectionRule'],
-                'Action': {'Type': 'BLOCK'}
+                'RuleId': resource_properties['WAFBadBotRule'],
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
             }
         })
 
-    if 'WAFXssRule' in resource_properties:
+    if 'WAFSqlInjectionRule' in resource_properties and resource_properties['WAFSqlInjectionRule'] not in current_rules:
         updates.append({
             'Action': 'INSERT',
             'ActivatedRule': {
                 'Priority': 80,
+                'RuleId': resource_properties['WAFSqlInjectionRule'],
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
+            }
+        })
+
+    if 'WAFXssRule' in resource_properties and resource_properties['WAFXssRule'] not in current_rules:
+        updates.append({
+            'Action': 'INSERT',
+            'ActivatedRule': {
+                'Priority': 90,
                 'RuleId': resource_properties['WAFXssRule'],
-                'Action': {'Type': 'BLOCK'}
+                'Action': {'Type': 'BLOCK'},
+                'Type': 'REGULAR'
             }
         })
 
@@ -257,7 +433,7 @@ def create_stack(resource_properties):
     #--------------------------------------------------------------------------
     # Call IP Reputation List
     #--------------------------------------------------------------------------
-    if 'LambdaWAFReputationListsParserFunction' in resource_properties:
+    if 'LambdaWAFReputationListsParserFunction' in resource_properties and 'WAFIPReputationListsRule1' in resource_properties and 'WAFIPReputationListsRule2' in resource_properties:
         try:
             lambda_client = boto3.client('lambda')
             response = lambda_client.invoke(
@@ -291,19 +467,19 @@ def create_stack(resource_properties):
 
 def update_stack(stack_name, resource_properties):
     print("[update_stack] Start")
-    delete_stack(stack_name, resource_properties)
-    create_stack(resource_properties)
+    delete_stack(stack_name, resource_properties, False)
+    create_stack(stack_name, resource_properties)
     print("[update_stack] End")
 
-def delete_stack(stack_name, resource_properties):
-    print("[update_stack] Start")
-    updates = []
+def delete_stack(stack_name, resource_properties, force_delete):
+    print("[delete_stack] Start")
+    webacl_updates = []
 
     #--------------------------------------------------------------------------
     # Update S3 Event configuration
     #--------------------------------------------------------------------------
-    if 'CloudFrontAccessLogBucket' in resource_properties and resource_properties['LambdaWAFLogParserFunction']:
-        remove_s3_bucket_lambda_event(resource_properties['CloudFrontAccessLogBucket'],
+    if "AccessLogBucket" in resource_properties and resource_properties['LambdaWAFLogParserFunction']:
+        remove_s3_bucket_lambda_event(resource_properties["AccessLogBucket"],
             resource_properties['LambdaWAFLogParserFunction'])
 
     #--------------------------------------------------------------------------
@@ -315,41 +491,72 @@ def delete_stack(stack_name, resource_properties):
 
             for rule in response['WebACL']['Rules']:
                 rule_id = rule['RuleId'].encode('utf8')
-                if can_delete_rule(stack_name, resource_properties, rule_id):
-                    updates.append({
+                rule_type = rule['Type']
+                can_delete, ipsets_to_clean = can_delete_rule(stack_name, resource_properties, rule_id, rule_type, force_delete)
+                if can_delete:
+                    webacl_updates.append({
                         'Action': 'DELETE',
                         'ActivatedRule': {
                             'Priority': rule['Priority'],
                             'RuleId': rule_id,
-                            'Action': rule['Action']
+                            'Action': rule['Action'],
+                            'Type': rule_type
                         }
                     })
+
+                    #----------------------------------------------------------
+                    # Clean IP Sets
+                    #----------------------------------------------------------
+                    for ip_set_id in ipsets_to_clean:
+                        clean_ip_set(ip_set_id)
 
         except Exception, e:
             print(e)
             delay = math.pow(2, attempt)
-            print("[create_stack] Retrying in %d seconds..." % (delay))
+            print("[delete_stack] Retrying in %d seconds..." % (delay))
             time.sleep(delay)
         else:
             break
     else:
-        print("[create_stack] Failed ALL attempts to call API")
+        print("[delete_stack] Failed ALL attempts to call API")
 
     #--------------------------------------------------------------------------
     # Update WebACL
     #--------------------------------------------------------------------------
-    update_web_acl(resource_properties['WAFWebACL'], updates)
+    update_web_acl(resource_properties['WAFWebACL'], webacl_updates)
 
-    print("[update_stack] End")
+    #--------------------------------------------------------------------------
+    # Delete Rate Based Rule
+    #--------------------------------------------------------------------------
+    if force_delete or resource_properties['ActivateHttpFloodProtection'] == 'no':
+        delete_rate_based_rules(stack_name)    
 
-def can_delete_rule(stack_name, resource_properties, rule_id):
-    result = False
+    print("[delete_stack] End")
+
+def can_delete_rule(stack_name, resource_properties, rule_id, rule_type, force_delete):
+    can_delete = False
+    ipsets_to_clean = []
+
     for attempt in range(API_CALL_NUM_RETRIES):
         try:
-            rule_detail = waf.get_rule(RuleId=rule_id)
-            result = (stack_name == None or (rule_detail['Rule']['Name'].startswith(stack_name + " - ") and rule_detail['Rule']['Name'] != (stack_name + " - Whitelist Rule") ))
-            if 'WAFWhitelistRule' in resource_properties:
-                result = (stack_name == None or (rule_detail['Rule']['Name'].startswith(stack_name + " - ")))
+            rule_detail = None
+            protection_activated = False
+            if rule_type == 'RATE_BASED':
+                rule_detail = waf.get_rate_based_rule(RuleId=rule_id)
+                protection_activated = resource_properties['ActivateHttpFloodProtection'] == 'yes'
+            else:
+                rule_detail = waf.get_rule(RuleId=rule_id)
+                protection_activated = rule_id in resource_properties.values()
+
+            can_delete = force_delete or (not force_delete and 
+                    rule_detail['Rule']['Name'].startswith(stack_name + " - ") and 
+                    not protection_activated)
+
+            if can_delete and rule_type != 'RATE_BASED':
+                for p in rule_detail['Rule']['Predicates']:
+                    if p['Type'] == 'IPMatch':
+                        ipsets_to_clean.append(p['DataId'].encode('utf8'))
+
         except Exception, e:
             print(e)
             delay = math.pow(2, attempt)
@@ -360,7 +567,7 @@ def can_delete_rule(stack_name, resource_properties, rule_id):
     else:
         print("[can_delete_rule] Failed ALL attempts to call API")
 
-    return result
+    return can_delete, ipsets_to_clean
 
 def send_response(event, context, responseStatus, responseData):
     responseBody = {'Status': responseStatus,
@@ -444,7 +651,7 @@ def lambda_handler(event, context):
     responseData = {}
     try:
         cf = boto3.client('cloudformation')
-        stack_name = context.invoked_function_arn.split(':')[6].rsplit('-', 2)[0]
+        stack_name = event['ResourceProperties']['StackName']
         cf_desc = cf.describe_stacks(StackName=stack_name)
 
         global waf
@@ -455,18 +662,55 @@ def lambda_handler(event, context):
             waf = boto3.client('waf')
 
         request_type = event['RequestType'].upper()
-        stack_status = cf_desc['Stacks'][0]['StackStatus'].upper()
 
-        if ('CREATE' in request_type and "CREATE" in stack_status):
-            create_stack(event['ResourceProperties'])
+        #----------------------------------------------------------
+        # Extra check for DELETE events
+        #----------------------------------------------------------
+        stack_status = cf_desc['Stacks'][0]['StackStatus'].upper()
+        if 'DELETE' in request_type and "UPDATE" in stack_status:
+
+            # Get new input parameters state
+            parameters = cf_desc['Stacks'][0]['Parameters']
+            for p in parameters:
+                if p["ParameterKey"] == "SqlInjectionProtectionParam":
+                    event['ResourceProperties']['SqlInjectionProtection'] = p["ParameterValue"]
+
+                if p["ParameterKey"] == "CrossSiteScriptingProtectionParam":
+                    event['ResourceProperties']['CrossSiteScriptingProtection'] = p["ParameterValue"]
+
+                if p["ParameterKey"] == "ActivateHttpFloodProtectionParam":
+                    event['ResourceProperties']['ActivateHttpFloodProtection'] = p["ParameterValue"]
+
+                if p["ParameterKey"] == "ActivateScansProbesProtectionParam":
+                    event['ResourceProperties']['ActivateScansProbesProtection'] = p["ParameterValue"]
+
+                if p["ParameterKey"] == "ActivateReputationListsProtectionParam":
+                    event['ResourceProperties']['ActivateReputationListsProtection'] = p["ParameterValue"]
+
+                if p["ParameterKey"] == "ActivateBadBotProtectionParam":
+                    event['ResourceProperties']['ActivateBadBotProtection'] = p["ParameterValue"]
+
+            # If the is at least one protection activated during UPDATE stack state,
+            # this should be handled as UPDATE event
+            if (event['ResourceProperties']['SqlInjectionProtection'] == "yes" or
+                event['ResourceProperties']['CrossSiteScriptingProtection'] == "yes" or
+                event['ResourceProperties']['ActivateHttpFloodProtection'] == "yes" or
+                event['ResourceProperties']['ActivateScansProbesProtection'] == "yes" or
+                event['ResourceProperties']['ActivateReputationListsProtection'] == "yes" or
+                event['ResourceProperties']['ActivateBadBotProtection'] == "yes"):
+                request_type = 'UPDATE'
+        #----------------------------------------------------------
+
+        if 'CREATE' in request_type:
+            create_stack(stack_name, event['ResourceProperties'])
             send_anonymous_usage_data(event['RequestType'], event['ResourceProperties'])
 
-        elif ('UPDATE' in request_type and "UPDATE" in stack_status):
+        elif 'UPDATE' in request_type:
             update_stack(stack_name, event['ResourceProperties'])
             send_anonymous_usage_data(event['RequestType'], event['ResourceProperties'])
 
-        elif ('DELETE' in request_type and "DELETE" in stack_status):
-            delete_stack(None, event['ResourceProperties'])
+        elif 'DELETE' in request_type:
+            delete_stack(stack_name, event['ResourceProperties'], True)
             send_anonymous_usage_data(event['RequestType'], event['ResourceProperties'])
 
     except Exception as e:

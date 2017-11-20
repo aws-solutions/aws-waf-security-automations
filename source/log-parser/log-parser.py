@@ -64,7 +64,7 @@ def get_outstanding_requesters(bucket_name, key_name):
     result = {}
     num_requests = 0
     try:
-        if int(environ['REQUEST_PER_MINUTE_LIMIT']) < 0 and int(environ['ERROR_PER_MINUTE_LIMIT']) < 0:
+        if int(environ['ERROR_PER_MINUTE_LIMIT']) < 0:
             return outstanding_requesters, num_requests
 
         #--------------------------------------------------------------------------------------------------------------
@@ -117,10 +117,7 @@ def get_outstanding_requesters(bucket_name, key_name):
         now_timestamp_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         for k, v in result.iteritems():
             k = k.split('-')[-1]
-            if (
-                    (int(environ['REQUEST_PER_MINUTE_LIMIT']) >= 0 and v[REQUEST_COUNTER_INDEX] > int(environ['REQUEST_PER_MINUTE_LIMIT'])) or
-                    (int(environ['ERROR_PER_MINUTE_LIMIT']) >= 0 and v[ERROR_COUNTER_INDEX] > int(environ['ERROR_PER_MINUTE_LIMIT']))
-                ):
+            if int(environ['ERROR_PER_MINUTE_LIMIT']) >= 0 and v[ERROR_COUNTER_INDEX] > int(environ['ERROR_PER_MINUTE_LIMIT']):
                 if k not in outstanding_requesters['block'].keys() or (
                         outstanding_requesters['block'][k]['max_req_per_min'] < v[REQUEST_COUNTER_INDEX] or
                         outstanding_requesters['block'][k]['max_err_per_min'] < v[ERROR_COUNTER_INDEX]
@@ -168,10 +165,7 @@ def merge_current_blocked_requesters(key_name, outstanding_requesters):
         #----------------------------------------------------------------------------------------------------------
         for k, v in remote_outstanding_requesters['block'].iteritems():
             try:
-                if (
-                        (int(environ['REQUEST_PER_MINUTE_LIMIT']) >= 0 and v['max_req_per_min'] > int(environ['REQUEST_PER_MINUTE_LIMIT'])) or
-                        (int(environ['ERROR_PER_MINUTE_LIMIT']) >= 0 and v['max_err_per_min'] > int(environ['ERROR_PER_MINUTE_LIMIT']))
-                    ):
+                if int(environ['ERROR_PER_MINUTE_LIMIT']) >= 0 and v['max_err_per_min'] > int(environ['ERROR_PER_MINUTE_LIMIT']):
                     if k in outstanding_requesters['block'].keys():
                         print("[merge_current_blocked_requesters] \t\tUpdating data of BLOCK %s rule"%k)
                         outstanding_requesters['block'][k]['updated_at'] = now_timestamp_str
@@ -182,6 +176,7 @@ def merge_current_blocked_requesters(key_name, outstanding_requesters):
 
                     else:
                         prev_updated_at = datetime.datetime.strptime(v['updated_at'], "%Y-%m-%d %H:%M:%S")
+                        prev_updated_at = prev_updated_at.replace(tzinfo=response['LastModified'].tzinfo)
                         total_diff_min = ((now_timestamp - prev_updated_at).total_seconds())/60
                         if total_diff_min < int(environ['BLACKLIST_BLOCK_PERIOD']):
                             print("[merge_current_blocked_requesters] \t\tKeeping %s rule"%k)
@@ -542,7 +537,7 @@ def lambda_handler(event, context):
         key_name = urllib.unquote_plus(event['Records'][0]['s3']['object']['key']).decode('utf8')
 
         if key_name == OUTPUT_FILE_NAME:
-            print("[lambda_handler] \tIgnore processinf output file")
+            print("[lambda_handler] \tIgnore processing output file")
             return
 
         global waf

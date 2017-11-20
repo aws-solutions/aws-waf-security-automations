@@ -42,6 +42,7 @@ sed -i '' -e $replace dist/aws-waf-security-automations-alb.template
 cd dist
 mkdir -p v2
 mkdir -p v3
+mkdir -p v4
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Log Parser"
 echo "------------------------------------------------------------------------------"
@@ -64,4 +65,4 @@ echo "--------------------------------------------------------------------------
 echo "[Packing] Custom Resource"
 echo "------------------------------------------------------------------------------"
 cd ../custom-resource
-zip -q -r9 ../../deployment/dist/v3/custom-resource.zip *
+zip -q -r9 ../../deployment/dist/v4/custom-resource.zip *
