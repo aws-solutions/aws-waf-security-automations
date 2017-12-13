@@ -12,7 +12,7 @@
         "Label": {
           "default": "Settings"
         },
-        "Parameters": ["AccessLogBucket"]
+        "Parameters": ["AccessLogBucket", "MetricName"]
       }, {
         "Label": {
           "default": "Advanced Settings"
@@ -45,6 +45,9 @@
         },
         "AccessLogBucket": {
           "default": "ALB Access Log Bucket Name"
+        },
+        "MetricName": {
+          "default": "WAF Metric Name"
         },
         "SendAnonymousUsageData": {
           "default": "Send Anonymous Usage Data"
@@ -105,6 +108,12 @@
       "Default": "",
       "AllowedPattern": "(^$|^([a-z]|(\\d(?!\\d{0,2}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3})))([a-z\\d]|(\\.(?!(\\.|-)))|(-(?!\\.))){1,61}[a-z\\d]$)",
       "Description": "Enter a name for the Amazon S3 bucket where you want to store Amazon ALB access logs. This can be the name of either an existing S3 bucket, or a new bucket that the template will create during stack launch (if it does not find a matching bucket name). The solution will modify the bucket’s notification configuration to trigger the Log Parser AWS Lambda function whenever a new log file is saved in this bucket. More about bucket name restriction here: http://amzn.to/1p1YlU5"
+    },
+    "MetricName": {
+      "Type": "String",
+      "Default": "SecurityAutomationsMaliciousRequesters",
+      "AllowedPattern": "[a-zA-Z0-9]+",
+      "Description": "Enter a name for the WebACL Cloudwatch metrics."
     },
     "SendAnonymousUsageData": {
       "Type": "String",
@@ -543,7 +552,7 @@
         "DefaultAction": {
           "Type": "ALLOW"
         },
-        "MetricName": "SecurityAutomationsMaliciousRequesters",
+        "MetricName": {"Ref": "MetricName"},
         "Rules": [{
           "Action": {
             "Type": "ALLOW"
