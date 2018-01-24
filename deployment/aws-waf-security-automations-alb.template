@@ -721,6 +721,9 @@
             "ERROR_PER_MINUTE_LIMIT": {
               "Ref": "ErrorThreshold"
             },
+            "REQUEST_PER_MINUTE_LIMIT": {
+              "Ref": "RequestThreshold"
+            },
             "SEND_ANONYMOUS_USAGE_DATA": {
               "Ref": "SendAnonymousUsageData"
             },
