@@ -543,7 +543,22 @@
         "DefaultAction": {
           "Type": "ALLOW"
         },
-        "MetricName": "SecurityAutomationsMaliciousRequesters",
+        "MetricName": {
+          "Fn::Join": ["",
+            [
+              {
+                "Fn::Join": ["",
+                  {
+                    "Fn::Split": ["-",
+                      {"Ref": "AWS::StackName"}
+                    ]
+                  }
+                ]
+              },
+              "WAFRequesters"
+            ]
+          ]
+        },
         "Rules": [{
           "Action": {
             "Type": "ALLOW"
@@ -728,7 +743,23 @@
             "REGION": {
               "Ref": "AWS::Region"
             },
-            "LOG_TYPE": "cloudfront"
+            "LOG_TYPE": "cloudfront",
+            "ACL_METRIC_NAME": {
+              "Fn::Join": ["",
+                [
+                  {
+                    "Fn::Join": ["",
+                      {
+                        "Fn::Split": ["-",
+                          {"Ref": "AWS::StackName"}
+                        ]
+                      }
+                    ]
+                  },
+                  "WAFRequesters"
+                ]
+              ]
+            }
           }
         },
         "Runtime": "python2.7",
@@ -895,8 +926,24 @@
             },
             "UUID": {
               "Fn::GetAtt": ["CreateUniqueID", "UUID"]
+            },
+            "ACL_METRIC_NAME": {
+              "Fn::Join": ["",
+                [
+                  {
+                    "Fn::Join": ["",
+                      {
+                        "Fn::Split": ["-",
+                          {"Ref": "AWS::StackName"}
+                        ]
+                      }
+                    ]
+                  },
+                  "WAFRequesters"
+                ]
+              ]
             }
-          }
+	  }
         }
       }
     },
@@ -1093,7 +1140,23 @@
             "REGION": {
               "Ref": "AWS::Region"
             },
-            "LOG_TYPE": "cloudfront"
+            "LOG_TYPE": "cloudfront",
+            "ACL_METRIC_NAME":{
+              "Fn::Join": ["",
+                [
+                  {
+                    "Fn::Join": ["",
+                      { 
+                        "Fn::Split": ["-",
+                          {"Ref": "AWS::StackName"}
+                        ]
+                      }
+                    ]
+                  },
+                  "WAFRequesters"
+                ]
+              ]
+            }
           }
         },
         "Runtime": "python2.7",

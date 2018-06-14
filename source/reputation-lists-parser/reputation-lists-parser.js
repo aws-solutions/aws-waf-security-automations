@@ -304,7 +304,7 @@ function send_anonymous_usage_data(event, context) {
                     Value: "ALL"
                 }, {
                     Name: "WebACL",
-                    Value: "SecurityAutomationsMaliciousRequesters"
+                    Value: process.env.ACL_METRIC_NAME
                 }]
             };
             cloudwatch.getMetricStatistics(params, function(err, data) {
@@ -338,7 +338,7 @@ function send_anonymous_usage_data(event, context) {
                     Value: "ALL"
                 }, {
                     Name: "WebACL",
-                    Value: "SecurityAutomationsMaliciousRequesters"
+                    Value: process.env.ACL_METRIC_NAME
                 }]
             };
             cloudwatch.getMetricStatistics(params, function(err, data) {
@@ -372,7 +372,7 @@ function send_anonymous_usage_data(event, context) {
                     Value: "ALL"
                 }, {
                     Name: "WebACL",
-                    Value: "SecurityAutomationsMaliciousRequesters"
+                    Value: process.env.ACL_METRIC_NAME
                 }]
             };
             cloudwatch.getMetricStatistics(params, function(err, data) {
@@ -406,7 +406,7 @@ function send_anonymous_usage_data(event, context) {
                     Value: "ALL"
                 }, {
                     Name: "WebACL",
-                    Value: "SecurityAutomationsMaliciousRequesters"
+                    Value: process.env.ACL_METRIC_NAME
                 }]
             };
             cloudwatch.getMetricStatistics(params, function(err, data) {

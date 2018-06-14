@@ -398,7 +398,7 @@ def send_anonymous_usage_data():
                     },
                     {
                         "Name": "WebACL",
-                        "Value": "SecurityAutomationsMaliciousRequesters"
+                        "Value": environ['ACL_METRIC_NAME']
                     }
                 ]
             )
@@ -425,7 +425,7 @@ def send_anonymous_usage_data():
                     },
                     {
                         "Name": "WebACL",
-                        "Value": "SecurityAutomationsMaliciousRequesters"
+                        "Value": environ['ACL_METRIC_NAME']
                     }
                 ]
             )
@@ -452,7 +452,7 @@ def send_anonymous_usage_data():
                     },
                     {
                         "Name": "WebACL",
-                        "Value": "SecurityAutomationsMaliciousRequesters"
+                        "Value": environ['ACL_METRIC_NAME']
                     }
                 ]
             )
@@ -479,7 +479,7 @@ def send_anonymous_usage_data():
                     },
                     {
                         "Name": "WebACL",
-                        "Value": "SecurityAutomationsMaliciousRequesters"
+                        "Value": environ['ACL_METRIC_NAME']
                     }
                 ]
             )
