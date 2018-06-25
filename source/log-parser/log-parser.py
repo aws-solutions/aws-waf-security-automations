@@ -15,6 +15,7 @@ import gzip
 import datetime
 import time
 import math
+import notification
 from os import environ
 
 from urllib2 import Request
@@ -561,6 +562,7 @@ def lambda_handler(event, context):
             #----------------------------------------------------------------------------------------------------------
             print("[lambda_handler] \tUpdate new blocked requesters list to S3")
             #----------------------------------------------------------------------------------------------------------
+            notification.publish(outstanding_requesters)
             write_output(key_name, outstanding_requesters)
 
             #----------------------------------------------------------------------------------------------------------
