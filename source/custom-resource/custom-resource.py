@@ -43,7 +43,7 @@ def update_web_acl(web_acl_id, updates):
                     Updates=updates,
                     DefaultAction={'Type': 'ALLOW'}
                 )
-            except Exception, e:
+            except Exception as e:
                 print(e)
                 delay = math.pow(2, attempt)
                 print("[update_web_acl] Retrying in %d seconds..." % (delay))
@@ -153,7 +153,7 @@ def remove_s3_bucket_lambda_event(bucket_name, lambda_function_arn):
 
         response = s3_client.put_bucket_notification_configuration(Bucket=bucket_name, NotificationConfiguration=new_conf)
 
-    except Exception, e:
+    except Exception as e:
         print(e)
         print("[ERROR] Error to remove S3 Bucket lambda event")
 
@@ -179,7 +179,7 @@ def get_or_create_rate_based_rule(stack_name, resource_properties):
                     response = waf.list_rate_based_rules(NextMarker=response['NextMarker'], Limit=LIST_LIMIT)
                     keep_looking = (len(response['Rules']) > 0)
 
-        except Exception, e:
+        except Exception as e:
             print(e)
             delay = math.pow(2, attempt)
             print("[get_or_create_rate_based_rule] Retrying in %d seconds..." % (delay))
@@ -205,7 +205,7 @@ def get_or_create_rate_based_rule(stack_name, resource_properties):
 
                 rule_id = response['Rule']['RuleId'].encode('utf8').strip()
 
-            except Exception, e:
+            except Exception as e:
                 print(e)
                 delay = math.pow(2, attempt)
                 print("[get_or_create_rate_based_rule] Retrying in %d seconds..." % (delay))
@@ -241,7 +241,7 @@ def delete_rate_based_rules(stack_name):
                     response = waf.list_rate_based_rules(NextMarker=response['NextMarker'], Limit=LIST_LIMIT)
                     keep_looking = (len(response['Rules']) > 0)
 
-        except Exception, e:
+        except Exception as e:
             print(e)
             delay = math.pow(2, attempt)
             print("[delete_rate_based_rules] Retrying in %d seconds..." % (delay))
@@ -272,7 +272,7 @@ def clean_ip_set(ip_set_id):
                     if counter >= BATCH_DELETE_LIMIT:
                         break
 
-                print "[clean_ip_set] Deleting %d IPs..."%len(updates)
+                print ("[clean_ip_set] Deleting %d IPs..."%len(updates))
                 waf.update_ip_set(
                     IPSetId=ip_set_id,
                     ChangeToken=waf.get_change_token()['ChangeToken'],
@@ -280,7 +280,7 @@ def clean_ip_set(ip_set_id):
                 )
                 response = waf.get_ip_set(IPSetId=ip_set_id)
 
-        except Exception, e:
+        except Exception as e:
             print(e)
             delay = math.pow(2, attempt)
             print("[clean_ip_set] Error to clean IP Set %s. Retrying in %d seconds..."%ip_set_id, delay)
@@ -310,7 +310,7 @@ def create_stack(stack_name, resource_properties):
             response = waf.get_web_acl(WebACLId=resource_properties['WAFWebACL'])
             current_rules = [r['RuleId'].encode('utf8') for r in response['WebACL']['Rules']]
 
-        except Exception, e:
+        except Exception as e:
             print(e)
             delay = math.pow(2, attempt)
             print("[create_stack] Retrying in %d seconds..." % (delay))
@@ -459,7 +459,7 @@ def create_stack(stack_name, resource_properties):
                       ]
                     }"""%(resource_properties['LOG_TYPE'], resource_properties['Region'], resource_properties['WAFReputationListsSet1'], resource_properties['WAFReputationListsSet2'])
             )
-        except Exception, e:
+        except Exception as e:
             print(e)
             print("[ERROR] Failed to call IP Reputation List function")
 
@@ -510,7 +510,7 @@ def delete_stack(stack_name, resource_properties, force_delete):
                     for ip_set_id in ipsets_to_clean:
                         clean_ip_set(ip_set_id)
 
-        except Exception, e:
+        except Exception as e:
             print(e)
             delay = math.pow(2, attempt)
             print("[delete_stack] Retrying in %d seconds..." % (delay))
@@ -557,7 +557,7 @@ def can_delete_rule(stack_name, resource_properties, rule_id, rule_type, force_d
                     if p['Type'] == 'IPMatch':
                         ipsets_to_clean.append(p['DataId'].encode('utf8'))
 
-        except Exception, e:
+        except Exception as e:
             print(e)
             delay = math.pow(2, attempt)
             print("[can_delete_rule] Retrying in %d seconds..." % (delay))
@@ -639,7 +639,7 @@ def send_anonymous_usage_data(action_type, resource_properties):
         print('[send_anonymous_usage_data] Response Content: {}'.format(content))
 
         print("[send_anonymous_usage_data] End")
-    except Exception, e:
+    except Exception as e:
         print(e)
         print("[send_anonymous_usage_data] Failed to Send Data")
 
