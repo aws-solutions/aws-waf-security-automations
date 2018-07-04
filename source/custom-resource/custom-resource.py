@@ -341,7 +341,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 20,
                 'RuleId': resource_properties['WAFBlacklistRule'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -354,7 +354,7 @@ def create_stack(stack_name, resource_properties):
                 'ActivatedRule': {
                     'Priority': 30,
                     'RuleId': rbr_id,
-                    'Action': {'Type': 'BLOCK'},
+                    'Action': {'Type': rule_action},
                     'Type': 'RATE_BASED'
                 }
             })
@@ -365,7 +365,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 40,
                 'RuleId': resource_properties['WAFScansProbesRule'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -376,7 +376,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 50,
                 'RuleId': resource_properties['WAFIPReputationListsRule1'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -387,7 +387,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 60,
                 'RuleId': resource_properties['WAFIPReputationListsRule2'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -398,7 +398,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 70,
                 'RuleId': resource_properties['WAFBadBotRule'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -409,7 +409,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 80,
                 'RuleId': resource_properties['WAFSqlInjectionRule'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -420,7 +420,7 @@ def create_stack(stack_name, resource_properties):
             'ActivatedRule': {
                 'Priority': 90,
                 'RuleId': resource_properties['WAFXssRule'],
-                'Action': {'Type': 'BLOCK'},
+                'Action': {'Type': rule_action},
                 'Type': 'REGULAR'
             }
         })
@@ -584,7 +584,7 @@ def send_response(event, context, responseStatus, responseData):
 
         if req.status_code != 200:
             print(req.text)
-            raise Exception('Recieved non 200 response while sending response to CFN.')
+            raise Exception('Received non 200 response while sending response to CFN.')
         return
 
     except requests.exceptions.RequestException as e:
@@ -652,6 +652,14 @@ def lambda_handler(event, context):
     try:
         cf = boto3.client('cloudformation')
         stack_name = event['ResourceProperties']['StackName']
+        #If an action has been specified, use it otherwise set the default action to block
+        global rule_action
+        
+        rule_action = ("BLOCK" if (event["ResourceProperties"] is None or (not ("RuleAction" in event["ResourceProperties"]))) else event["ResourceProperties"]["RuleAction"])
+        print ("Setting rule action to " + rule_action)
+        if not rule_action in ["BLOCK","ALLOW","COUNT"]:
+            raise Exception("Invalid value ""{}"" for parameter ""RuleAction"", valid values are BLOCK, ALLOW, COUNT".format(rule_action))
+        
         cf_desc = cf.describe_stacks(StackName=stack_name)
 
         global waf
