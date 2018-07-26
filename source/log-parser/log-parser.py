@@ -316,11 +316,19 @@ def update_waf_ip_set(outstanding_requesters, ip_set_id, ip_set_already_blocked)
         if response != None:
             for k in response['IPSet']['IPSetDescriptors']:
                 ip_value = k['Value'].split('/')[0]
-                if ip_value not in top_outstanding_requesters.keys():
+                if ip_value not in top_outstanding_requesters.keys() and len(ip_value) < 15:
                     updates_list.append({
                         'Action': 'DELETE',
                         'IPSetDescriptor': {
                             'Type': 'IPV4',
+                            'Value': k['Value']
+                        }
+                    })
+                else if ip_value not in top_outstanding_requesters.keys() and len(ip_value) > 15:
+                    updates_list.append({
+                        'Action': 'DELETE',
+                        'IPSetDescriptor': {
+                            'Type': 'IPV6',
                             'Value': k['Value']
                         }
                     })
@@ -332,13 +340,23 @@ def update_waf_ip_set(outstanding_requesters, ip_set_id, ip_set_already_blocked)
         print("[update_waf_ip_set] \tBlock remaining outstanding requesters")
         #--------------------------------------------------------------------------------------------------------------
         for k in top_outstanding_requesters.keys():
-            updates_list.append({
-                'Action': 'INSERT',
-                'IPSetDescriptor': {
-                    'Type': 'IPV4',
-                    'Value': "%s/32"%k
-                }
-            })
+        	if len(k) < 15:
+				updates_list.append({
+					'Action': 'INSERT',
+					'IPSetDescriptor': {
+						'Type': 'IPV4',
+						'Value': "%s/32"%k
+					}
+				})
+			else:
+				updates_list.append({
+					'Action': 'INSERT',
+					'IPSetDescriptor': {
+						'Type': 'IPV6',
+						'Value': "%s/128"%k
+					}
+				})
+
 
         #--------------------------------------------------------------------------------------------------------------
         print("[update_waf_ip_set] \tCommit changes in WAF IP set")
