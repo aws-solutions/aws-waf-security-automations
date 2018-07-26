@@ -341,23 +341,21 @@ def update_waf_ip_set(outstanding_requesters, ip_set_id, ip_set_already_blocked)
         #--------------------------------------------------------------------------------------------------------------
         for k in top_outstanding_requesters.keys():
         	if len(k) < 15:
-				updates_list.append({
-					'Action': 'INSERT',
-					'IPSetDescriptor': {
-						'Type': 'IPV4',
-						'Value': "%s/32"%k
-					}
-				})
-			else:
-				updates_list.append({
-					'Action': 'INSERT',
-					'IPSetDescriptor': {
-						'Type': 'IPV6',
-						'Value': "%s/128"%k
-					}
-				})
-
-
+			updates_list.append({
+			'Action': 'INSERT',
+			'IPSetDescriptor': {
+			'Type': 'IPV4',
+			'Value': "%s/32"%k
+			}
+		})
+		else:
+			updates_list.append({
+				'Action': 'INSERT',
+				'IPSetDescriptor': {
+				'Type': 'IPV6',
+				'Value': "%s/128"%k
+				}
+		})
         #--------------------------------------------------------------------------------------------------------------
         print("[update_waf_ip_set] \tCommit changes in WAF IP set")
         #--------------------------------------------------------------------------------------------------------------
