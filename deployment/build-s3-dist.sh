@@ -36,33 +36,33 @@ cp -f aws-waf-security-automations-alb.template dist
 echo "Updating code source bucket in template with $1"
 replace="s/%%BUCKET_NAME%%/$1/g"
 echo "sed -i '' -e $replace dist/aws-waf-security-automations.template"
-sed -i '' -e $replace dist/aws-waf-security-automations.template
+sed -i '' -e "$replace" dist/aws-waf-security-automations.template
 echo "sed -i '' -e $replace dist/aws-waf-security-automations-alb.template"
-sed -i '' -e $replace dist/aws-waf-security-automations-alb.template
-cd dist
+sed -i '' -e "$replace" dist/aws-waf-security-automations-alb.template
+cd dist || exit 1
 mkdir -p v2
 mkdir -p v3
 mkdir -p v4
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Log Parser"
 echo "------------------------------------------------------------------------------"
-cd ../../source/log-parser
-zip -q -r9 ../../deployment/dist/v2/log-parser.zip *
+cd ../../source/log-parser || exit 1
+zip -q -r9 ../../deployment/dist/v2/log-parser.zip ./*
 echo ""
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Access Handler"
 echo "------------------------------------------------------------------------------"
-cd ../access-handler
-zip -q -r9 ../../deployment/dist/v2/access-handler.zip *
+cd ../access-handler || exit 1
+zip -q -r9 ../../deployment/dist/v2/access-handler.zip ./*
 echo ""
 echo "------------------------------------------------------------------------------"
 echo "[Packing] IP Lists Parser"
 echo "------------------------------------------------------------------------------"
-cd ../reputation-lists-parser
-zip -q -r9 ../../deployment/dist/v3/reputation-lists-parser.zip *
+cd ../reputation-lists-parser || exit 1
+zip -q -r9 ../../deployment/dist/v3/reputation-lists-parser.zip ./*
 echo ""
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Custom Resource"
 echo "------------------------------------------------------------------------------"
-cd ../custom-resource
-zip -q -r9 ../../deployment/dist/v4/custom-resource.zip *
+cd ../custom-resource || exit 1
+zip -q -r9 ../../deployment/dist/v4/custom-resource.zip ./*
