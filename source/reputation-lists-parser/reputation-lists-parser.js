@@ -189,33 +189,33 @@ function removeContainedRanges(ranges) {
 }
 
 /**
- * Combine ranges into larger /8, /16, or /24 ranges
+ * Combine ranges into larger /8, /16 through /31 ranges
  * @param {Range[]} ranges - Array of ranges
  */
 function CombineRanges(ranges) {
-    // TODO: should check if we can combine ranges into a larger /8, /26, /24 ranges
+    // TODO: should check if we can combine ranges into a larger /8, /16 through /31 ranges
 }
 
 /**
- * Split ranges into smaller /8, /16, /24 or /32 ranges
+ * Split ranges into smaller /8 or /16 ranges
  * @param {Range[]} ranges - Array of ranges
  */
 function splitRanges(ranges) {
-    // AWS WAF only support ranges with /8, /16, /24 or /32 masks
+    // AWS WAF only support ranges with /8 or /16 through /32 ranges
     // Therefore, split ranges into ones that have the above masks
-    // For example = /15 can be decomposed into 2 /16 ranges, /17 can be decomposed into 64 /14 ranges
+    // For example = /7 can be decomposed into 2 /8 ranges, /9 can be decomposed into 128 /16 ranges
     for (var i = 0; i < ranges.length; i++) {
         var range = ranges[i];
         var list = range.list;
         var mask = range.mask;
-        var supportedMask = (mask <= 8 ? 8 : mask <= 16 ? 16 : mask <= 24 ? 24 : 32);
+        var supportedMask = (mask <= 8 ? 8 : mask <= 16 ? 16 : mask);
         var supportedMaskDifference = supportedMask - mask;
-        // Check if the mask is not a /8, /16, /24 or /32
+        // Check if the mask is not a /8, /16 through /32
         if (supportedMaskDifference > 0) {
             var size = Math.pow(2, 32 - supportedMask);
             var count = Math.pow(2, supportedMaskDifference);
             var newRanges = [];
-            // create new ranges that have /8, /16, /24 or /32 masks to replace this
+            // create new ranges that have /8, /16 through /32 masks to replace this
             for (var j = 0; j < count; j++) {
                 newRanges.push(new Range(list, range.number + (j * size), supportedMask));
             }
@@ -225,7 +225,7 @@ function splitRanges(ranges) {
             i += newRanges.length - 1;
         }
     }
-    logRanges(ranges, 'after splitting to /8, /16, /24 or /32 ranges...');
+    logRanges(ranges, 'after splitting to /8, /16 through /32 ranges...');
 }
 
 /**
