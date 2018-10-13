@@ -927,7 +927,7 @@
             "Fn::Join": [
               "", [
                 "{\"lists\":",
-                "[{\"url\":\"https://www.spamhaus.org/drop/drop.txt\"},{\"url\":\"https://check.torproject.org/exit-addresses\",\"prefix\":\"ExitAddress \"},{\"url\":\"https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt\"}]",
+                "[{\"url\":\"https://www.spamhaus.org/drop/drop.txt\"},{\"url\":\"https://www.spamhaus.org/drop/edrop.txt\"},{\"url\":\"https://check.torproject.org/exit-addresses\",\"prefix\":\"ExitAddress \"},{\"url\":\"https://rules.emergingthreats.net/fwrules/emerging-Block-IPs.txt\"}]",
                 ",\"logType\":\"alb\"",
                 ",\"region\":\"", {
                   "Ref": "AWS::Region"
