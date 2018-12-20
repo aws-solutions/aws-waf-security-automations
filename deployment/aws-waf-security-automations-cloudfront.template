@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-ALB) - AWS WAF Security Automations - ALB %%VERSION%%: This AWS CloudFormation template helps
+  (SO0006-CloudFront) - AWS WAF Security Automations %%VERSION%%: This AWS CloudFormation template helps
   you provision the AWS WAF Security Automations stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
@@ -71,35 +71,35 @@ Conditions:
 
 Resources:
   WAFWhitelistSet:
-    Type: 'AWS::WAFRegional::IPSet'
+    Type: 'AWS::WAF::IPSet'
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Whitelist Set']]
 
   WAFBlacklistSet:
-    Type: 'AWS::WAFRegional::IPSet'
+    Type: 'AWS::WAF::IPSet'
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Blacklist Set']]
 
   WAFScannersProbesSet:
-    Type: 'AWS::WAFRegional::IPSet'
+    Type: 'AWS::WAF::IPSet'
     Condition: LogParserActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Scanners & Probes Set']]
 
   WAFReputationListsSet:
-    Type: 'AWS::WAFRegional::IPSet'
+    Type: 'AWS::WAF::IPSet'
     Condition: ReputationListsProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'IP Reputation Lists Set']]
 
   WAFBadBotSet:
-    Type: 'AWS::WAFRegional::IPSet'
+    Type: 'AWS::WAF::IPSet'
     Condition: BadBotProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'IP Bad Bot Set']]
 
   WAFSqlInjectionDetection:
-    Type: 'AWS::WAFRegional::SqlInjectionMatchSet'
+    Type: 'AWS::WAF::SqlInjectionMatchSet'
     Condition: SqlInjectionProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'SQL injection Detection']]
@@ -140,7 +140,7 @@ Resources:
           TextTransformation: HTML_ENTITY_DECODE
 
   WAFXssDetection:
-    Type: 'AWS::WAFRegional::XssMatchSet'
+    Type: 'AWS::WAF::XssMatchSet'
     Condition: CrossSiteScriptingProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'XSS Detection Detection']]
@@ -173,7 +173,7 @@ Resources:
           TextTransformation: HTML_ENTITY_DECODE
 
   WAFWhitelistRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Whitelist Rule']]
       MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'WhitelistRule']]
@@ -183,7 +183,7 @@ Resources:
           Type: IPMatch
 
   WAFBlacklistRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Blacklist Rule']]
       MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'BlacklistRule']]
@@ -193,7 +193,7 @@ Resources:
           Type: IPMatch
 
   WAFScannersProbesRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Condition: LogParserActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Scanners & Probes Rule']]
@@ -204,7 +204,7 @@ Resources:
           Type: IPMatch
 
   WAFIPReputationListsRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Condition: ReputationListsProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'WAF IP Reputation Lists Rule']]
@@ -215,7 +215,7 @@ Resources:
           Type: IPMatch
 
   WAFBadBotRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Condition: BadBotProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'Bad Bot Rule']]
@@ -226,7 +226,7 @@ Resources:
           Type: IPMatch
 
   WAFSqlInjectionRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Condition: SqlInjectionProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'SQL Injection Rule']]
@@ -237,7 +237,7 @@ Resources:
           Type: SqlInjectionMatch
 
   WAFXssRule:
-    Type: 'AWS::WAFRegional::Rule'
+    Type: 'AWS::WAF::Rule'
     Condition: CrossSiteScriptingProtectionActivated
     Properties:
       Name: !Join [' - ', [!Ref 'AWS::StackName', 'XSS Rule']]
@@ -248,7 +248,7 @@ Resources:
           Type: XssMatch
 
   WAFWebACL:
-    Type: 'AWS::WAFRegional::WebACL'
+    Type: 'AWS::WAF::WebACL'
     Properties:
       Name: !Ref 'AWS::StackName'
       DefaultAction:

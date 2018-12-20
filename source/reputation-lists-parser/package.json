@@ -1,0 +1,43 @@
+{
+    "name": "reputation-lists-parser",
+    "description": "A microservice function for keep reputation lists updated",
+    "main": "reputation-lists-parser.js",
+    "author": {
+        "name": "aws-solutions-builder"
+    },
+    "version": "0.0.1",
+    "private": "true",
+    "dependencies": {
+        "async": "*",
+        "sax": "*",
+        "xml2js": "*",
+        "xmlbuilder": "*"
+    },
+    "devDependencies": {
+        "aws-sdk-mock": "*",
+        "chai": "*",
+        "chai-things": "^0.2.0",
+        "grunt": "^0.4.5",
+        "grunt-aws-lambda": "^0.13.0",
+        "grunt-contrib-clean": "*",
+        "grunt-pack": "0.1.*",
+        "mocha": "*",
+        "npm-run-all": "*",
+        "sinon": "^2.4.1",
+        "sinon-chai": "*"
+    },
+    "scripts": {
+        "test": "NODE_PATH=./node_modules mocha *.spec.js",
+        "build-init": "rm -rf dist && rm -f archive.zip && mkdir dist",
+        "build:copy": "cp reputation-lists-parser.js dist/",
+        "build:install": "cp package.json dist/ && cd dist && npm install --production",
+        "build": "npm-run-all -s build-init build:copy build:install",
+        "zip": "cd dist && zip -rq reputation-lists-parser.zip ."
+    },
+    "bundledDependencies": [
+        "async",
+        "sax",
+        "xml2js",
+        "xmlbuilder"
+    ]
+}
