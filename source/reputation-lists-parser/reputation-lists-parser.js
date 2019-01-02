@@ -109,7 +109,7 @@ function List(url, prefix) {
     this.url = url;
     this.prefix = prefix || '';
     // a regular expression to find the address or range on each line of the list, with an option prefix before it
-    this.regex = new RegExp('^' + this.prefix + '((?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])(?:/(?:3[0-2]|[1-2][0-9]|[0-9]))?)');
+    this.regex = new RegExp('^' + this.prefix + '\\s*((?:(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9][0-9]|[0-9])(?:/(?:3[0-2]|[1-2][0-9]|[0-9]))?)');
 }
 /**
  * Get ranges defined in list
