@@ -158,6 +158,15 @@ Parameters:
       acceptable requests per FIVE-minute period per IP address. Minimum value of 2000.
       If you chose to deactivate this protection, ignore this parameter.
 
+  ErrorCodesRegex:
+    Type: String
+    Default: '400|403|404|405'
+    Description:  >-
+      If you chose yes for the Activate Scanners & Probes Protection parameter, enter a regular expression
+      for the status codes you wish to block. If you chose to deactivate Scanners & Probes
+      protection, ignore this parameter.
+
+
   ErrorThreshold:
     Type: Number
     Default: 50
@@ -279,6 +288,8 @@ Resources:
             This function parses access logs to identify suspicious behavior, such as an
             abnormal amount of errors. It then blocks those IP addresses for a customer-defined
             period of time. Parameters:
+          - !Ref ErrorCodesRegex
+          - ','
           - !Ref ErrorThreshold
           - ','
           - !Ref WAFBlockPeriod
@@ -294,6 +305,7 @@ Resources:
           IP_SET_ID_BLACKLIST: !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFBlacklistSet, !GetAtt CloudFrontStack.Outputs.WAFBlacklistSet]
           IP_SET_ID_AUTO_BLOCK: !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFScannersProbesSet, !GetAtt CloudFrontStack.Outputs.WAFScannersProbesSet]
           BLACKLIST_BLOCK_PERIOD: !Ref WAFBlockPeriod
+          BLOCK_ERROR_CODES: !Ref ErrorCodesRegex
           ERROR_PER_MINUTE_LIMIT: !Ref ErrorThreshold
           SEND_ANONYMOUS_USAGE_DATA: !FindInMap ["Solution", "Data", "SendAnonymousUsageData"]
           UUID: !GetAtt CreateUniqueID.UUID

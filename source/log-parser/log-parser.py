@@ -29,7 +29,7 @@ logging.getLogger().debug('Loading function')
 # Constants
 #======================================================================================================================
 API_CALL_NUM_RETRIES = 3
-BLOCK_ERROR_CODES = ['400','403','404','405'] # error codes to parse logs for
+BLOCK_ERROR_CODES = environ['BLOCK_ERROR_CODES']# error codes to parse logs for
 OUTPUT_FILE_NAME = environ['STACK_NAME'] + '.json'
 
 # CloudFront Access Logs
@@ -103,7 +103,7 @@ def get_outstanding_requesters(bucket_name, key_name):
                     else:
                         result[request_key] = [1,0]
 
-                    if line_data[return_code_index] in BLOCK_ERROR_CODES:
+                    if re.search(r"%s" % BLOCK_ERROR_CODES, line_data[return_code_index]): # Compare status code to regex set as environment variable
                         result[request_key][ERROR_COUNTER_INDEX] += 1
 
                     num_requests += 1
