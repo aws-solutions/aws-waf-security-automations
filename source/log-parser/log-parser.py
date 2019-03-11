@@ -18,6 +18,7 @@ import math
 import time
 import datetime
 import gzip
+import re
 from urllib.parse import unquote_plus
 from urllib.request import Request, urlopen
 from os import environ
