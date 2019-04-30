@@ -1,2 +1,20 @@
-AWS WAF Security Automations 
-Copyright 2017 Amazon.com, Inc. or its affiliates. All Rights Reserved. 
+AWS WAF Security Automations
+
+Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Licensed under the Amazon Software License (the "License"). You may not use this file except
+in compliance with the License. A copy of the License is located at http://aws.amazon.com/asl/
+or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+
+**********************
+THIRD PARTY COMPONENTS
+**********************
+This software includes third party software subject to the following copyrights:
+
+async under the Massachusetts Institute of Technology (MIT) license
+sax under the Internet Systems Consortium (ISC) license
+xml2js under the Massachusetts Institute of Technology (MIT) license
+xmlbuilder under the Massachusetts Institute of Technology (MIT) license
+
+The licenses for these third party components are included in LICENSE.txt

@@ -8,7 +8,7 @@ Description: >-
   and an Amazon CloudWatch custom metric. You will be billed for the AWS resources used if you
   create a stack from this template.
 
-  **NOTICE** Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved. Licensed under
+  **NOTICE** Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved. Licensed under
   the Amazon Software License (the License). You may not use this file except in compliance with the
   License. A copy of the License is located at http://aws.amazon.com/asl/ or in the license file
   accompanying this file. This file is distributed on an AS IS BASIS, WITHOUT WARRANTIES OR
@@ -17,9 +17,9 @@ Description: >-
 
 
 Parameters:
-  SqlInjectionProtectionParam:
+  ActivateSqlInjectionProtectionParam:
     Type: String
-  CrossSiteScriptingProtectionParam:
+  ActivateCrossSiteScriptingProtectionParam:
     Type: String
   ActivateHttpFloodProtectionParam:
     Type: String
@@ -29,7 +29,7 @@ Parameters:
     Type: String
   ActivateBadBotProtectionParam:
     Type: String
-  AccessLogBucket:
+  AppAccessLogBucket:
     Type: String
   WafApiType:
     Type: String
@@ -37,24 +37,51 @@ Parameters:
     Type: String
   ParentStackName:
     Type: String
-
+  WafLogBucket:
+    Type: String
+  GlueAccessLogsDatabase:
+    Type: String
+  GlueAppAccessLogsTable:
+    Type: String
+  GlueWafAccessLogsTable:
+    Type: String
 
 Conditions:
   SqlInjectionProtectionActivated: !Equals
-    - !Ref SqlInjectionProtectionParam
+    - !Ref ActivateSqlInjectionProtectionParam
     - 'yes'
 
   CrossSiteScriptingProtectionActivated: !Equals
-    - !Ref CrossSiteScriptingProtectionParam
+    - !Ref ActivateCrossSiteScriptingProtectionParam
     - 'yes'
 
-  HttpFloodProtectionActivated: !Equals
+  HttpFloodLambdaLogParser: !Equals
     - !Ref ActivateHttpFloodProtectionParam
-    - 'yes'
+    - 'yes - AWS Lambda log parser'
 
-  ScannersProbesProtectionActivated: !Equals
+  HttpFloodAthenaLogParser: !Equals
+    - !Ref ActivateHttpFloodProtectionParam
+    - 'yes - Amazon Athena log parser'
+
+  HttpFloodProtectionLogParserActivated: !Or
+    - Condition: HttpFloodLambdaLogParser
+    - Condition: HttpFloodAthenaLogParser
+
+  ScannersProbesLambdaLogParser: !Equals
     - !Ref ActivateScannersProbesProtectionParam
-    - 'yes'
+    - 'yes - AWS Lambda log parser'
+
+  ScannersProbesAthenaLogParser: !Equals
+    - !Ref ActivateScannersProbesProtectionParam
+    - 'yes - Amazon Athena log parser'
+
+  ScannersProbesProtectionActivated: !Or
+    - Condition: ScannersProbesLambdaLogParser
+    - Condition: ScannersProbesAthenaLogParser
+
+  LogParser: !Or
+    - Condition: HttpFloodProtectionLogParserActivated
+    - Condition: ScannersProbesProtectionActivated
 
   ReputationListsProtectionActivated: !Equals
     - !Ref ActivateReputationListsProtectionParam
@@ -64,45 +91,47 @@ Conditions:
     - !Ref ActivateBadBotProtectionParam
     - 'yes'
 
-  LogParserActivated: !Equals
-    - !Ref ActivateScannersProbesProtectionParam
-    - 'yes'
-
 
 Resources:
   WAFWhitelistSet:
     Type: 'AWS::WAFRegional::IPSet'
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Whitelist Set']]
+      Name: !Sub '${ParentStackName} - Whitelist Set'
 
   WAFBlacklistSet:
     Type: 'AWS::WAFRegional::IPSet'
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Blacklist Set']]
+      Name: !Sub '${ParentStackName} - Blacklist Set'
+
+  WAFHttpFloodSet:
+    Type: 'AWS::WAFRegional::IPSet'
+    Condition: HttpFloodProtectionLogParserActivated
+    Properties:
+      Name: !Sub '${ParentStackName} - HTTP Flood Set'
 
   WAFScannersProbesSet:
     Type: 'AWS::WAFRegional::IPSet'
-    Condition: LogParserActivated
+    Condition: ScannersProbesProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Scanners & Probes Set']]
+      Name: !Sub '${ParentStackName} - Scanners & Probes Set'
 
   WAFReputationListsSet:
     Type: 'AWS::WAFRegional::IPSet'
     Condition: ReputationListsProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'IP Reputation Lists Set']]
+      Name: !Sub '${ParentStackName} - IP Reputation Lists Set'
 
   WAFBadBotSet:
     Type: 'AWS::WAFRegional::IPSet'
     Condition: BadBotProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'IP Bad Bot Set']]
+      Name: !Sub '${ParentStackName} - IP Bad Bot Set'
 
   WAFSqlInjectionDetection:
     Type: 'AWS::WAFRegional::SqlInjectionMatchSet'
     Condition: SqlInjectionProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'SQL injection Detection']]
+      Name: !Sub '${ParentStackName} - SQL injection Detection'
       SqlInjectionMatchTuples:
         - FieldToMatch:
             Type: QUERY_STRING
@@ -143,7 +172,7 @@ Resources:
     Type: 'AWS::WAFRegional::XssMatchSet'
     Condition: CrossSiteScriptingProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'XSS Detection Detection']]
+      Name: !Sub '${ParentStackName} - XSS Detection Detection'
       XssMatchTuples:
         - FieldToMatch:
             Type: QUERY_STRING
@@ -175,8 +204,8 @@ Resources:
   WAFWhitelistRule:
     Type: 'AWS::WAFRegional::Rule'
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Whitelist Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'WhitelistRule']]
+      Name: !Sub '${ParentStackName} - Whitelist Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WhitelistRule']]
       Predicates:
         - DataId: !Ref WAFWhitelistSet
           Negated: false
@@ -185,19 +214,30 @@ Resources:
   WAFBlacklistRule:
     Type: 'AWS::WAFRegional::Rule'
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Blacklist Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'BlacklistRule']]
+      Name: !Sub '${ParentStackName} - Blacklist Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BlacklistRule']]
       Predicates:
         - DataId: !Ref WAFBlacklistSet
           Negated: false
           Type: IPMatch
 
+  WAFHttpFloodRegularRule:
+    Type: 'AWS::WAFRegional::Rule'
+    Condition: HttpFloodProtectionLogParserActivated
+    Properties:
+      Name: !Sub '${ParentStackName} - HTTP Flood Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'HttpFloodRule']]
+      Predicates:
+        - DataId: !Ref WAFHttpFloodSet
+          Negated: false
+          Type: IPMatch
+
   WAFScannersProbesRule:
     Type: 'AWS::WAFRegional::Rule'
-    Condition: LogParserActivated
+    Condition: ScannersProbesProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Scanners & Probes Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'ScannersProbesRule']]
+      Name: !Sub '${ParentStackName} - Scanners & Probes Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'ScannersProbesRule']]
       Predicates:
         - DataId: !Ref WAFScannersProbesSet
           Negated: false
@@ -207,8 +247,8 @@ Resources:
     Type: 'AWS::WAFRegional::Rule'
     Condition: ReputationListsProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'WAF IP Reputation Lists Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'IPReputationListsRule']]
+      Name: !Sub '${ParentStackName} - WAF IP Reputation Lists Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'IPReputationListsRule']]
       Predicates:
         - DataId: !Ref WAFReputationListsSet
           Negated: false
@@ -218,8 +258,8 @@ Resources:
     Type: 'AWS::WAFRegional::Rule'
     Condition: BadBotProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'Bad Bot Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'BadBotRule']]
+      Name: !Sub '${ParentStackName} - Bad Bot Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BadBotRule']]
       Predicates:
         - DataId: !Ref WAFBadBotSet
           Negated: false
@@ -229,8 +269,8 @@ Resources:
     Type: 'AWS::WAFRegional::Rule'
     Condition: SqlInjectionProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'SQL Injection Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'SqlInjectionRule']]
+      Name: !Sub '${ParentStackName} - SQL Injection Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'SqlInjectionRule']]
       Predicates:
         - DataId: !Ref WAFSqlInjectionDetection
           Negated: false
@@ -240,8 +280,8 @@ Resources:
     Type: 'AWS::WAFRegional::Rule'
     Condition: CrossSiteScriptingProtectionActivated
     Properties:
-      Name: !Join [' - ', [!Ref 'AWS::StackName', 'XSS Rule']]
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'XssRule']]
+      Name: !Sub '${ParentStackName} - XSS Rule'
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'XssRule']]
       Predicates:
         - DataId: !Ref WAFXssDetection
           Negated: false
@@ -250,10 +290,10 @@ Resources:
   WAFWebACL:
     Type: 'AWS::WAFRegional::WebACL'
     Properties:
-      Name: !Ref 'AWS::StackName'
+      Name: !Ref 'ParentStackName'
       DefaultAction:
         Type: ALLOW
-      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'MaliciousRequesters']]
+      MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'MaliciousRequesters']]
       Rules:
         - Action:
             Type: ALLOW
@@ -267,10 +307,9 @@ Resources:
 
   LambdaRoleLogParser:
     Type: 'AWS::IAM::Role'
-    Condition: LogParserActivated
+    Condition: LogParser
     Properties:
       AssumeRolePolicyDocument:
-        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -280,42 +319,133 @@ Resources:
               - sts:AssumeRole
       Path: '/'
       Policies:
-        - PolicyName: S3Access
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: 's3:GetObject'
-                Resource:
-                  - !Join ['', ['arn:aws:s3:::', !Ref AccessLogBucket, '/*']]
-        - PolicyName: S3AccessPut
-          PolicyDocument:
-            Version: 2012-10-17
-            Statement:
-              - Effect: Allow
-                Action: 's3:PutObject'
-                Resource:
-                  - !Join ['', ['arn:aws:s3:::', !Ref AccessLogBucket, '/', !Ref ParentStackName, '.json']]
+        - !If
+          - ScannersProbesProtectionActivated
+          - PolicyName: ScannersProbesProtectionActivatedAccess
+            PolicyDocument:
+              Statement:
+                # S3 Resources
+                - Effect: Allow
+                  Action: 's3:GetObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/*'
+                - Effect: Allow
+                  Action: 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/${ParentStackName}-app_log_out.json'
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/${ParentStackName}-app_log_conf.json'
+                # AWS WAF Resources
+                - Effect: Allow
+                  Action:
+                    - !Sub '${WafApiType}:GetIPSet'
+                    - !Sub '${WafApiType}:UpdateIPSet'
+                  Resource:
+                    - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/${WAFBlacklistSet}'
+                    - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/${WAFScannersProbesSet}'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ScannersProbesAthenaLogParser
+          - PolicyName: ScannersProbesAthenaLogParserAccess
+            PolicyDocument:
+              Statement:
+                # Athena Resources
+                - Effect: Allow
+                  Action:
+                    - 'athena:GetNamedQuery'
+                    - 'athena:StartQueryExecution'
+                  Resource:
+                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/*'
+                # S3 Resources
+                - Effect: Allow
+                  Action:
+                    - 's3:GetBucketLocation'
+                    - 's3:GetObject'
+                    - 's3:ListBucket'
+                    - 's3:ListBucketMultipartUploads'
+                    - 's3:ListMultipartUploadParts'
+                    - 's3:AbortMultipartUpload'
+                    - 's3:CreateBucket'
+                    - 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/athena_results/*'
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}'
+                # Glue Resources
+                - Effect: Allow
+                  Action:
+                    - 'glue:GetTable'
+                  Resource:
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueAccessLogsDatabase}'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueAccessLogsDatabase}/${GlueAppAccessLogsTable}'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HttpFloodProtectionLogParserActivated
+          - PolicyName: HttpFloodProtectionLogParserActivatedAccess
+            PolicyDocument:
+              Statement:
+                # S3 Resources
+                - Effect: Allow
+                  Action: 's3:GetObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/*'
+                - Effect: Allow
+                  Action: 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/${ParentStackName}-waf_log_out.json'
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/${ParentStackName}-waf_log_conf.json'
+                # AWS WAF Resources
+                - Effect: Allow
+                  Action:
+                    - !Sub '${WafApiType}:GetIPSet'
+                    - !Sub '${WafApiType}:UpdateIPSet'
+                  Resource:
+                    - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/${WAFBlacklistSet}'
+                    - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/${WAFHttpFloodSet}'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HttpFloodAthenaLogParser
+          - PolicyName: HttpFloodAthenaLogParserAccess
+            PolicyDocument:
+              Statement:
+                # Athena Resources
+                - Effect: Allow
+                  Action:
+                    - 'athena:GetNamedQuery'
+                    - 'athena:StartQueryExecution'
+                  Resource:
+                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/*'
+                # S3 Resources
+                - Effect: Allow
+                  Action:
+                    - 's3:GetBucketLocation'
+                    - 's3:GetObject'
+                    - 's3:ListBucket'
+                    - 's3:ListBucketMultipartUploads'
+                    - 's3:ListMultipartUploadParts'
+                    - 's3:AbortMultipartUpload'
+                    - 's3:CreateBucket'
+                    - 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/athena_results/*'
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}'
+                # Glue Resources
+                - Effect: Allow
+                  Action:
+                    - 'glue:GetTable'
+                  Resource:
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueAccessLogsDatabase}'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueAccessLogsDatabase}/${GlueWafAccessLogsTable}'
+          - !Ref 'AWS::NoValue'
         - PolicyName: WAFGetChangeToken
           PolicyDocument:
             Statement:
               - Effect: Allow
-                Action: !Join ['', [!Ref WafApiType, ':GetChangeToken']]
+                Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
                   - '*'
-        - PolicyName: WAFGetAndUpdateIPSet
-          PolicyDocument:
-            Statement:
-              - Effect: Allow
-                Action:
-                  - !Join ['', [!Ref WafApiType, ':GetIPSet']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateIPSet']]
-                Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ipset/', !Ref WAFBlacklistSet]]
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ipset/', !Ref WAFScannersProbesSet]]
         - PolicyName: LogsAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -323,10 +453,9 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Join [':', ['arn:aws:logs', !Ref 'AWS::Region', !Ref 'AWS::AccountId', 'log-group:/aws/lambda/*']]
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
         - PolicyName: CloudWatchAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: 'cloudwatch:GetMetricStatistics'
@@ -354,12 +483,12 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Join [':', ['arn:aws:logs', !Ref 'AWS::Region', !Ref 'AWS::AccountId', 'log-group:/aws/lambda/*']]
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
         - PolicyName: 'WAFGetChangeToken'
           PolicyDocument:
             Statement:
               - Effect: Allow
-                Action: !Join ['', [!Ref WafApiType, ':GetChangeToken']]
+                Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
                   - '*'
         - PolicyName: WAFGetAndUpdateIPSet
@@ -367,21 +496,19 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - !Join ['', [!Ref WafApiType, ':GetIPSet']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateIPSet']]
+                  - !Sub '${WafApiType}:GetIPSet'
+                  - !Sub '${WafApiType}:UpdateIPSet'
                 Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ipset/', !Ref WAFReputationListsSet]]
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/${WAFReputationListsSet}'
         - PolicyName: CloudFormationAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: 'cloudformation:DescribeStacks'
                 Resource:
-                  - !Join ['', ['arn:aws:cloudformation:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':stack/', !Ref 'AWS::StackName', '/*']]
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
         - PolicyName: CloudWatchAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: 'cloudwatch:GetMetricStatistics'
@@ -393,7 +520,6 @@ Resources:
     Condition: BadBotProtectionActivated
     Properties:
       AssumeRolePolicyDocument:
-        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -407,7 +533,7 @@ Resources:
           PolicyDocument:
             Statement:
               - Effect: Allow
-                Action: !Join ['', [!Ref WafApiType, ':GetChangeToken']]
+                Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
                   - '*'
         - PolicyName: WAFGetAndUpdateIPSet
@@ -415,13 +541,12 @@ Resources:
             Statement:
               - Effect: Allow
                 Action:
-                  - !Join ['', [!Ref WafApiType, ':GetIPSet']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateIPSet']]
+                  - !Sub '${WafApiType}:GetIPSet'
+                  - !Sub '${WafApiType}:UpdateIPSet'
                 Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ipset/', !Ref WAFBadBotSet]]
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/${WAFBadBotSet}'
         - PolicyName: LogsAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -429,18 +554,16 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Join [':', ['arn:aws:logs', !Ref 'AWS::Region', !Ref 'AWS::AccountId', 'log-group:/aws/lambda/*']]
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
         - PolicyName: 'CloudFormationAccess'
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: 'cloudformation:DescribeStacks'
                 Resource:
-                  - !Join ['', ['arn:aws:cloudformation:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':stack/', !Ref 'AWS::StackName', '/*']]
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
         - PolicyName: CloudWatchAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: 'cloudwatch:GetMetricStatistics'
@@ -451,7 +574,6 @@ Resources:
     Type: 'AWS::IAM::Role'
     Properties:
       AssumeRolePolicyDocument:
-        Version: 2012-10-17
         Statement:
           - Effect: Allow
             Principal:
@@ -463,7 +585,6 @@ Resources:
       Policies:
         - PolicyName: S3AccessGeneral
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -471,10 +592,9 @@ Resources:
                   - 's3:GetBucketNotification'
                   - 's3:PutBucketNotification'
                 Resource:
-                  - !Join ['', ['arn:aws:s3:::*']]
+                  - 'arn:aws:s3:::*'
         - PolicyName: S3Access
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -482,83 +602,115 @@ Resources:
                   - 's3:GetObject'
                   - 's3:ListBucket'
                 Resource:
-                  - !Join ['', ['arn:aws:s3:::', !Ref AccessLogBucket]]
+                  - !Sub 'arn:aws:s3:::${AppAccessLogBucket}'
+        - !If
+          - ScannersProbesLambdaLogParser
+          - PolicyName: S3AppAccessPut
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/${ParentStackName}-app_log_conf.json'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HttpFloodLambdaLogParser
+          - PolicyName: S3WafAccessPut
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action: 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/${ParentStackName}-waf_log_conf.json'
+          - !Ref 'AWS::NoValue'
         - !If
           - ReputationListsProtectionActivated
           - PolicyName: LambdaAccess
             PolicyDocument:
-              Version: 2012-10-17
               Statement:
                 - Effect: Allow
                   Action: 'lambda:InvokeFunction'
                   Resource:
-                    - !Join [':', ['arn:aws:lambda', !Ref 'AWS::Region', !Ref 'AWS::AccountId', 'function:*']]
+                    - !Sub 'arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:*'
           - !Ref 'AWS::NoValue'
         - PolicyName: WAFAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
-                  - !Join ['', [!Ref WafApiType, ':GetWebACL']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateWebACL']]
+                  - !Sub '${WafApiType}:GetWebACL'
+                  - !Sub '${WafApiType}:UpdateWebACL'
                 Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':webacl/', !Ref WAFWebACL]]
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':rule/*']]
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ratebasedrule/*']]
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:webacl/${WAFWebACL}'
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:rule/*'
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:ratebasedrule/*'
         - PolicyName: 'WAFRuleAccess'
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
-                  - !Join ['', [!Ref WafApiType, ':GetRule']]
-                  - !Join ['', [!Ref WafApiType, ':GetIPSet']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateIPSet']]
+                  - !Sub '${WafApiType}:GetRule'
+                  - !Sub '${WafApiType}:GetIPSet'
+                  - !Sub '${WafApiType}:UpdateIPSet'
                 Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':rule/*']]
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:rule/*'
         - PolicyName: 'WAFIPSetAccess'
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
-                  - !Join ['', [!Ref WafApiType, ':GetIPSet']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateIPSet']]
+                  - !Sub '${WafApiType}:GetIPSet'
+                  - !Sub '${WafApiType}:UpdateIPSet'
                 Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ipset/*']]
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:ipset/*'
         - PolicyName: 'WAFRateBasedRuleAccess'
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
-                  - !Join ['', [!Ref WafApiType, ':GetRateBasedRule']]
-                  - !Join ['', [!Ref WafApiType, ':CreateRateBasedRule']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateRateBasedRule']]
-                  - !Join ['', [!Ref WafApiType, ':DeleteRateBasedRule']]
-                  - !Join ['', [!Ref WafApiType, ':ListRateBasedRules']]
-                  - !Join ['', [!Ref WafApiType, ':UpdateWebACL']]
+                  - !Sub '${WafApiType}:GetRateBasedRule'
+                  - !Sub '${WafApiType}:CreateRateBasedRule'
+                  - !Sub '${WafApiType}:UpdateRateBasedRule'
+                  - !Sub '${WafApiType}:DeleteRateBasedRule'
+                  - !Sub '${WafApiType}:ListRateBasedRules'
+                  - !Sub '${WafApiType}:UpdateWebACL'
                 Resource:
-                  - !Join ['', [!Ref WafArnPrefix, !Ref 'AWS::AccountId', ':ratebasedrule/*']]
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:ratebasedrule/*'
+        - !If
+          - HttpFloodProtectionLogParserActivated
+          - PolicyName: WAFLogsAccess
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - !Sub '${WafApiType}:PutLoggingConfiguration'
+                    - !Sub '${WafApiType}:DeleteLoggingConfiguration'
+                  Resource:
+                    - !Sub '${WafArnPrefix}${AWS::AccountId}:webacl/${WAFWebACL}'
+                - Effect: Allow
+                  Action: 'iam:CreateServiceLinkedRole'
+                  Resource:
+                    - 'arn:aws:iam::*:role/aws-service-role/waf-regional.amazonaws.com/AWSServiceRoleForWAFRegionalLogging'
+                  Condition:
+                    StringLike:
+                      iam:AWSServiceName: 'waf-regional.amazonaws.com'
+          - !Ref 'AWS::NoValue'
         - PolicyName: CloudFormationAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action: 'cloudformation:DescribeStacks'
                 Resource:
-                  - !Join ['', ['arn:aws:cloudformation:', !Ref 'AWS::Region', ':', !Ref 'AWS::AccountId', ':stack/', !Ref 'AWS::StackName', '/*']]
+                  - !Sub 'arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*'
         - PolicyName: WAFGetChangeToken
           PolicyDocument:
             Statement:
               - Effect: Allow
-                Action: !Join ['', [!Ref WafApiType, ':GetChangeToken']]
+                Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
                   - '*'
         - PolicyName: LogsAccess
           PolicyDocument:
-            Version: 2012-10-17
             Statement:
               - Effect: Allow
                 Action:
@@ -566,7 +718,7 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Join [':', ['arn:aws:logs', !Ref 'AWS::Region', !Ref 'AWS::AccountId', 'log-group:/aws/lambda/*']]
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
 
 Outputs:
   WAFWhitelistSet:
@@ -575,9 +727,13 @@ Outputs:
   WAFBlacklistSet:
     Value: !Ref WAFBlacklistSet
 
+  WAFHttpFloodSet:
+    Value: !Ref WAFHttpFloodSet
+    Condition: HttpFloodProtectionLogParserActivated
+
   WAFScannersProbesSet:
     Value: !Ref WAFScannersProbesSet
-    Condition: LogParserActivated
+    Condition: ScannersProbesProtectionActivated
 
   WAFReputationListsSet:
     Value: !Ref WAFReputationListsSet
@@ -593,9 +749,13 @@ Outputs:
   WAFBlacklistRule:
     Value: !Ref WAFBlacklistRule
 
+  WAFHttpFloodRegularRule:
+    Value: !Ref WAFHttpFloodRegularRule
+    Condition: HttpFloodProtectionLogParserActivated
+
   WAFScannersProbesRule:
     Value: !Ref WAFScannersProbesRule
-    Condition: LogParserActivated
+    Condition: ScannersProbesProtectionActivated
 
   WAFIPReputationListsRule:
     Value: !Ref WAFIPReputationListsRule
@@ -616,12 +776,15 @@ Outputs:
   WAFWebACL:
     Value: !Ref WAFWebACL
 
+  WAFWebACLArn:
+    Value: !Sub '${WafArnPrefix}${AWS::AccountId}:webacl/${WAFWebACL}'
+
   WAFWebACLMetricName:
-    Value: !Join ['', [!Join ['', !Split ['-', !Ref 'AWS::StackName']], 'MaliciousRequesters']]
+    Value: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'MaliciousRequesters']]
 
   LambdaRoleLogParserArn:
     Value: !GetAtt LambdaRoleLogParser.Arn
-    Condition: LogParserActivated
+    Condition: LogParser
 
   LambdaRoleReputationListsParserArn:
     Value: !GetAtt LambdaRoleReputationListsParser.Arn

@@ -11,6 +11,7 @@ This project consists of microservices that facilitate the functional areas of t
 |-source/
   |-access-handler/ [microservice for processing bad bots honeypot endpoint access. This AWS Lambda function intercepts the suspicious request and adds the source IP address to the AWS WAF block list]
   |-custom-resource/ [custom helper for CloudFormation deployment template]
+  |-helper/ [custom helper for CloudFormation deployment dependency check and auxiliary functions]
   |-log-parser/ [microservice for processing access logs searching for suspicious behavior and add the corresponding source IP addresses to an AWS WAF block list]
   |-reputation-lists-parser/ [microservice for processing third-party IP reputation lists and add malicious IP addresses to an AWS WAF block list]
 ```
@@ -57,12 +58,12 @@ aws s3 cp ./dist s3://$DEPLOY_BUCKET-$AWS_REGION/aws-waf-security-automations/$V
 ```
 
 #### 06. Deploy the AWS WAF Security Automations solution:
-* From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template or aws-waf-security-automations-alb.template.
-* Using AWS CloudFormation, launch the AWS WAF Security Automations solution stack using the copied Amazon S3 link for the aws-waf-security-automations.template or aws-waf-security-automations-alb.template.
+* From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template.
+* Using AWS CloudFormation, launch the AWS WAF Security Automations solution stack using the copied Amazon S3 link for the aws-waf-security-automations.template.
 
 ***
 
-Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
 

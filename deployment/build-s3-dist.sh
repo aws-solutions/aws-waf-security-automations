@@ -9,7 +9,7 @@
 # Paramenters:
 #  - source-bucket-base-name: Name for the S3 bucket location where the template will source the Lambda
 #    code from. The template will append '-[region_name]' to this bucket name.
-#    For example: ./build-s3-dist.sh solutions v2.2
+#    For example: ./build-s3-dist.sh solutions v2.3.0
 #    The template will then expect the source code to be located in the solutions-[region_name] bucket
 #
 #  - version-code: version of the package
@@ -51,6 +51,8 @@ echo "cp -f $template_dir/aws-waf-security-automations-cloudfront.template dist"
 cp -f "$template_dir/aws-waf-security-automations-cloudfront.template" "$dist_dir"
 echo "cp -f $template_dir/aws-waf-security-automations-alb.template dist"
 cp -f "$template_dir/aws-waf-security-automations-alb.template" "$dist_dir"
+echo "cp -f $template_dir/aws-waf-security-automations-firehose-athena.template dist"
+cp -f "$template_dir/aws-waf-security-automations-firehose-athena.template" "$dist_dir"
 
 echo "Updating code source bucket in template with $1"
 replace="s/%%BUCKET_NAME%%/$1/g"
@@ -60,6 +62,8 @@ echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-cloudfront.te
 sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-cloudfront.template
 echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-alb.template"
 sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-alb.template
+echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-firehose-athena.template"
+sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-firehose-athena.template
 
 echo "Updating code source version in template with $2"
 replace="s/%%VERSION%%/$2/g"
@@ -69,6 +73,8 @@ echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-cloudfront.te
 sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-cloudfront.template
 echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-alb.template"
 sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-alb.template
+echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-firehose-athena.template"
+sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-firehose-athena.template
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Log Parser"
@@ -95,3 +101,9 @@ echo "[Packing] Custom Resource"
 echo "------------------------------------------------------------------------------"
 cd "$source_dir"/custom-resource || exit 1
 zip -q -r9 "$dist_dir"/custom-resource.zip ./*
+
+echo "------------------------------------------------------------------------------"
+echo "[Packing] Helper"
+echo "------------------------------------------------------------------------------"
+cd "$source_dir"/helper || exit 1
+zip -q -r9 "$dist_dir"/helper.zip ./*

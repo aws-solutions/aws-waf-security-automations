@@ -1,5 +1,5 @@
 #####################################################################################################################
-# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
 #                                                                                                                   #
 # Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance        #
 # with the License. A copy of the License is located at                                                             #
@@ -18,21 +18,21 @@ import logging
 import math
 import time
 import datetime
-import uuid
 from urllib.request import Request, urlopen
 from botocore.vendored import requests
 from os import environ
+from botocore.config import Config
 
 logging.getLogger().debug('Loading function')
 
 #======================================================================================================================
 # Constants
 #======================================================================================================================
-API_CALL_NUM_RETRIES = 3
+API_CALL_NUM_RETRIES = 5
 LIST_LIMIT  = 50
-BATCH_DELETE_LIMIT = 1000
+BATCH_DELETE_LIMIT = 500
+DELAY_BETWEEN_DELETES = 2
 RULE_SUFIX_RATE_BASED = "-HTTP Flood Rule"
-
 
 #======================================================================================================================
 # Configure Access Log Bucket
@@ -41,23 +41,23 @@ RULE_SUFIX_RATE_BASED = "-HTTP Flood Rule"
 # Create a bucket (if not exist) and configure an event to call Log Parser lambda funcion when new Access log file is
 # created (and stored on this S3 bucket).
 #
-# Its important to not that this function can raise exception when:
-# 01. The bucket name already exist
-# 02. The bucket already exist and was created in tha different region than the specified
-# 03. When PutBucketNotificationConfiguration is called using ambiguously configuration. S3 Cannot have overlapping
-#       suffixes in two rules if the prefixes are overlapping for the same event type.
+# This function can raise exception if:
+# 01. A empty bucket name is used
+# 02. The bucket already exists and was created in a account that you cant access
+# 03. The bucket already exists and was created in a different region.
+#     You can't trigger log parser lambda function from another region.
+#
+# All those requirements are pre-verified by helper function.
 #----------------------------------------------------------------------------------------------------------------------
-def configure_s3_bucket(region, bucket_name, lambda_function_arn):
+def configure_s3_bucket(region, bucket_name):
     logging.getLogger().debug("[configure_s3_bucket] Start")
 
     if bucket_name.strip() == "":
         raise Exception('Failed to configure access log bucket. Name cannot be empty!')
 
     #------------------------------------------------------------------------------------------------------------------
-    # Check if bucket exists (and inside the specified region)
+    # Create the S3 bucket (if not exist)
     #------------------------------------------------------------------------------------------------------------------
-    exists = True
-    s3 = boto3.resource('s3')
     s3_client = boto3.client('s3')
     try:
         s3_client.head_bucket(Bucket=bucket_name)
@@ -66,98 +66,94 @@ def configure_s3_bucket(region, bucket_name, lambda_function_arn):
         # If it was a 404 error, then the bucket does not exist.
         error_code = int(e.response['Error']['Code'])
         if error_code == 404:
-            exists = False
+            if region == 'us-east-1':
+                s3_client.create_bucket(Bucket=bucket_name, ACL='private')
+            else:
+                s3_client.create_bucket(Bucket=bucket_name, ACL='private', CreateBucketConfiguration={'LocationConstraint': region})
 
-    #------------------------------------------------------------------------------------------------------------------
-    # Check if the bucket was created in the specified Region or create one (if not exists)
-    #------------------------------------------------------------------------------------------------------------------
-    if exists:
-        response = None
-        try:
-            response = s3_client.get_bucket_location(Bucket=bucket_name)
-        except Exception as e:
-            raise Exception('Failed to access the existing bucket information. Check if you own this bucket and if it has proper access policy.')
-
-        if response['LocationConstraint'] == None:
-            response['LocationConstraint'] = 'us-east-1'
-        if response['LocationConstraint'] != region:
-            raise Exception('Bucket located in a different region. S3 bucket and Log Parser Lambda (and therefore, you CloudFormation Stack) must be created in the same Region.')
-
-
-    else:
-        if region == 'us-east-1':
-            response = s3_client.create_bucket(Bucket=bucket_name)
-        else:
-            response = s3_client.create_bucket(Bucket=bucket_name, CreateBucketConfiguration={'LocationConstraint': region})
-
-        # Begin waiting for the S3 bucket, mybucket, to exist
-        s3_bucket_exists_waiter = s3_client.get_waiter('bucket_exists')
-        s3_bucket_exists_waiter.wait(Bucket=bucket_name)
-
-    #------------------------------------------------------------------------------------------------------------------
-    # Configure bucket event to call Log Parser whenever a new gz log file is added to the bucket
-    #------------------------------------------------------------------------------------------------------------------
-    lambda_already_configured = False
-    notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
-    if 'LambdaFunctionConfigurations' in notification_conf:
-        for lfc in notification_conf['LambdaFunctionConfigurations']:
-            for e in lfc['Events']:
-                if "ObjectCreated" in e:
-                    if lfc['LambdaFunctionArn'] == lambda_function_arn:
-                        lambda_already_configured = True
-
-    if lambda_already_configured:
-        logging.getLogger().info("[configure_s3_bucket] Skiping bucket event configuration. It is already configured to trigger Log Parser Lambda function.")
-    else:
-        new_conf = {}
-        new_conf['LambdaFunctionConfigurations'] = []
-        if 'TopicConfigurations' in notification_conf:
-            new_conf['TopicConfigurations'] = notification_conf['TopicConfigurations']
-        if 'QueueConfigurations' in notification_conf:
-            new_conf['QueueConfigurations'] = notification_conf['QueueConfigurations']
-        if 'LambdaFunctionConfigurations' in notification_conf:
-            new_conf['LambdaFunctionConfigurations'] = notification_conf['LambdaFunctionConfigurations']
-
-        new_conf['LambdaFunctionConfigurations'].append({
-            'Id': 'Call Log Parser',
-            'LambdaFunctionArn': lambda_function_arn,
-            'Events': ['s3:ObjectCreated:*'],
-            'Filter': {'Key': {'FilterRules': [{'Name': 'suffix','Value': 'gz'}]}}
-        })
-        response = s3_client.put_bucket_notification_configuration(Bucket=bucket_name, NotificationConfiguration=new_conf)
+            # Begin waiting for the S3 bucket, mybucket, to exist
+            s3_bucket_exists_waiter = s3_client.get_waiter('bucket_exists')
+            s3_bucket_exists_waiter.wait(Bucket=bucket_name)
 
     logging.getLogger().debug("[configure_s3_bucket] End")
+
+#----------------------------------------------------------------------------------------------------------------------
+# Configure bucket event to call Log Parser whenever a new gz log or athena result file is added to the bucket
+#----------------------------------------------------------------------------------------------------------------------
+def add_s3_bucket_lambda_event(bucket_name, lambda_function_arn, lambda_parser, athena_parser):
+    logging.getLogger().debug("[add_s3_bucket_lambda_event] Start")
+
+    s3_client = boto3.client('s3')
+    if lambda_function_arn != None and (lambda_parser or athena_parser):
+        notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
+
+        new_conf = {}
+        new_conf['LambdaFunctionConfigurations'] = []
+
+        if 'TopicConfigurations' in notification_conf:
+            new_conf['TopicConfigurations'] = notification_conf['TopicConfigurations']
+
+        if 'QueueConfigurations' in notification_conf:
+            new_conf['QueueConfigurations'] = notification_conf['QueueConfigurations']
+
+        if 'LambdaFunctionConfigurations' in notification_conf:
+            for lfc in notification_conf['LambdaFunctionConfigurations']:
+                for e in lfc['Events']:
+                    if "ObjectCreated" in e:
+                        if lfc['LambdaFunctionArn'] != lambda_function_arn:
+                            new_conf['LambdaFunctionConfigurations'].append(lfc)
+
+        if lambda_parser:
+            new_conf['LambdaFunctionConfigurations'].append({
+                'Id': 'Call Log Parser',
+                'LambdaFunctionArn': lambda_function_arn,
+                'Events': ['s3:ObjectCreated:*'],
+                'Filter': {'Key': {'FilterRules': [{'Name': 'suffix','Value': 'gz'}]}}
+            })
+
+        if athena_parser:
+            new_conf['LambdaFunctionConfigurations'].append({
+                'Id': 'Call Athena Result Parser',
+                'LambdaFunctionArn': lambda_function_arn,
+                'Events': ['s3:ObjectCreated:*'],
+                'Filter': {'Key': {'FilterRules': [{'Name': 'prefix','Value': 'athena_results/'}, {'Name': 'suffix','Value': 'csv'}]}}
+            })
+
+        s3_client.put_bucket_notification_configuration(Bucket=bucket_name, NotificationConfiguration=new_conf)
+
+    logging.getLogger().debug("[add_s3_bucket_lambda_event] End")
 
 #----------------------------------------------------------------------------------------------------------------------
 # Clean access log bucket event
 #----------------------------------------------------------------------------------------------------------------------
 def remove_s3_bucket_lambda_event(bucket_name, lambda_function_arn):
-    logging.getLogger().debug("[remove_s3_bucket_lambda_event] Start")
+    if lambda_function_arn != None:
+        logging.getLogger().debug("[remove_s3_bucket_lambda_event] Start")
 
-    s3_client = boto3.client('s3')
-    try:
-        new_conf = {}
-        notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
-        if 'TopicConfigurations' in notification_conf:
-            new_conf['TopicConfigurations'] = notification_conf['TopicConfigurations']
-        if 'QueueConfigurations' in notification_conf:
-            new_conf['QueueConfigurations'] = notification_conf['QueueConfigurations']
+        s3_client = boto3.client('s3')
+        try:
+            new_conf = {}
+            notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
+            if 'TopicConfigurations' in notification_conf:
+                new_conf['TopicConfigurations'] = notification_conf['TopicConfigurations']
+            if 'QueueConfigurations' in notification_conf:
+                new_conf['QueueConfigurations'] = notification_conf['QueueConfigurations']
 
-        if 'LambdaFunctionConfigurations' in notification_conf:
-            new_conf['LambdaFunctionConfigurations'] = []
-            for lfc in notification_conf['LambdaFunctionConfigurations']:
-                if lfc['LambdaFunctionArn'] == lambda_function_arn:
-                    continue #remove all references for Log Parser event
-                else:
-                    new_conf['LambdaFunctionConfigurations'].append(lfc)
+            if 'LambdaFunctionConfigurations' in notification_conf:
+                new_conf['LambdaFunctionConfigurations'] = []
+                for lfc in notification_conf['LambdaFunctionConfigurations']:
+                    if lfc['LambdaFunctionArn'] == lambda_function_arn:
+                        continue #remove all references for Log Parser event
+                    else:
+                        new_conf['LambdaFunctionConfigurations'].append(lfc)
 
-        response = s3_client.put_bucket_notification_configuration(Bucket=bucket_name, NotificationConfiguration=new_conf)
+            s3_client.put_bucket_notification_configuration(Bucket=bucket_name, NotificationConfiguration=new_conf)
 
-    except Exception as error:
-        logging.getLogger().error("Failed to remove S3 Bucket lambda event. Check if the bucket still exists, you own it and has proper access policy.")
-        logging.getLogger().error(str(error))
+        except Exception as error:
+            logging.getLogger().error("Failed to remove S3 Bucket lambda event. Check if the bucket still exists, you own it and has proper access policy.")
+            logging.getLogger().error(str(error))
 
-    logging.getLogger().debug("[remove_s3_bucket_lambda_event] End")
+        logging.getLogger().debug("[remove_s3_bucket_lambda_event] End")
 
 
 #======================================================================================================================
@@ -167,30 +163,16 @@ def create_rate_based_rule(stack_name, request_threshold, metric_name_prefix):
     logging.getLogger().debug("[create_rate_based_rule] Start")
 
     rule_id = ""
-    waf_client = boto3.client(environ['API_TYPE'])
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
-    for attempt in range(API_CALL_NUM_RETRIES):
-        try:
-            response = waf_client.create_rate_based_rule(
-                Name = stack_name + RULE_SUFIX_RATE_BASED,
-                MetricName = metric_name_prefix + 'HttpFloodRule',
-                RateKey='IP',
-                RateLimit=int(request_threshold.replace(",","")),
-                ChangeToken=waf_client.get_change_token()['ChangeToken']
-            )
-            rule_id = response['Rule']['RuleId'].strip()
-
-        except Exception as error:
-            logging.getLogger().error(str(error))
-            delay = math.pow(2, attempt)
-            logging.getLogger().info("[create_rate_based_rule] Retrying in %d seconds..." % (delay))
-            time.sleep(delay)
-
-        else:
-            break
-
-    else:
-        raise Exception("[create_rate_based_rule] Failed ALL attempts to create rate based rule")
+    response = waf_client.create_rate_based_rule(
+        Name = stack_name + RULE_SUFIX_RATE_BASED,
+        MetricName = metric_name_prefix + 'HttpFloodRule',
+        RateKey='IP',
+        RateLimit=int(request_threshold.replace(",","")),
+        ChangeToken=waf_client.get_change_token()['ChangeToken']
+    )
+    rule_id = response['Rule']['RuleId'].strip()
 
     logging.getLogger().debug("[create_rate_based_rule] End")
     return rule_id
@@ -198,63 +180,33 @@ def create_rate_based_rule(stack_name, request_threshold, metric_name_prefix):
 def update_rate_based_rule(rule_id, request_threshold):
     logging.getLogger().debug("[update_rate_based_rule] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'])
-    #------------------------------------------------------------------------------------------------------------------
-    # Create Update List
-    #------------------------------------------------------------------------------------------------------------------
-    for attempt in range(API_CALL_NUM_RETRIES):
-        try:
-            waf_client.update_rate_based_rule(
-                RuleId=rule_id,
-                Updates=[],
-                RateLimit=int(request_threshold.replace(",","")),
-                ChangeToken=waf_client.get_change_token()['ChangeToken']
-            )
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
-        except waf_client.exceptions.WAFNonexistentItemException as error:
-            raise Exception("Rate based rule %s doesn't exist (already deleted or failed to create)"%rule_id)
+    try:
+        waf_client.update_rate_based_rule(
+            RuleId=rule_id,
+            Updates=[],
+            RateLimit=int(request_threshold.replace(",","")),
+            ChangeToken=waf_client.get_change_token()['ChangeToken']
+        )
 
-        except Exception as error:
-            logging.getLogger().error(str(error))
-            delay = math.pow(2, attempt)
-            logging.getLogger().info("[update_rate_based_rule] Retrying in %d seconds..." % (delay))
-            time.sleep(delay)
-
-        else:
-            break
-    else:
-        raise Exception("[update_rate_based_rule] Failed to update rule '%s'."%rule_id)
+    except waf_client.exceptions.WAFNonexistentItemException:
+        raise Exception("Rate based rule %s doesn't exist (already deleted or failed to create)"%rule_id)
 
     logging.getLogger().debug("[update_rate_based_rule] End")
 
 def delete_rate_based_rule(rule_id):
     logging.getLogger().debug("[delete_rate_based_rule] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'])
-    #--------------------------------------------------------------------------
-    # Create Update List
-    #--------------------------------------------------------------------------
-    for attempt in range(API_CALL_NUM_RETRIES):
-        try:
-            waf_client.delete_rate_based_rule(
-                RuleId=rule_id,
-                ChangeToken=waf_client.get_change_token()['ChangeToken']
-            )
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    try:
+        waf_client.delete_rate_based_rule(
+            RuleId=rule_id,
+            ChangeToken=waf_client.get_change_token()['ChangeToken']
+        )
 
-        except waf_client.exceptions.WAFNonexistentItemException as error:
-            logging.getLogger().debug("[delete_rate_based_rule] Rate based rule %s doesn't exist (already deleted or failed to create)"%rule_id)
-            break
-
-        except Exception as error:
-            logging.getLogger().error(str(error))
-            delay = math.pow(2, attempt)
-            logging.getLogger().info("[delete_rate_based_rule] Retrying in %d seconds..." % (delay))
-            time.sleep(delay)
-
-        else:
-            break
-    else:
-        logging.getLogger().error("[delete_rate_based_rule] Failed to delete rule '%s'."%rule_id)
+    except waf_client.exceptions.WAFNonexistentItemException:
+        logging.getLogger().debug("[delete_rate_based_rule] Rate based rule %s doesn't exist (already deleted or failed to create)"%rule_id)
 
     logging.getLogger().debug("[delete_rate_based_rule] End")
 
@@ -265,27 +217,13 @@ def delete_rate_based_rule(rule_id):
 def update_web_acl(web_acl_id, updates):
     logging.getLogger().debug("[update_web_acl] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'])
-    if updates != []:
-        for attempt in range(API_CALL_NUM_RETRIES):
-            try:
-                response = waf_client.update_web_acl(
-                    WebACLId = web_acl_id,
-                    ChangeToken = waf_client.get_change_token()['ChangeToken'],
-                    Updates = updates
-                )
-
-            except Exception as error:
-                logging.getLogger().error(str(error))
-                delay = math.pow(2, attempt)
-                logging.getLogger().info("[update_web_acl] Retrying in %d seconds..." % (delay))
-                time.sleep(delay)
-
-            else:
-                break
-
-        else:
-            raise Exception("[update_web_acl] Failed ALL attempts to update Web ACL")
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    if len(updates) > 0:
+        waf_client.update_web_acl(
+            WebACLId = web_acl_id,
+            ChangeToken = waf_client.get_change_token()['ChangeToken'],
+            Updates = updates
+        )
 
     logging.getLogger().debug("[update_web_acl] End")
 
@@ -333,49 +271,37 @@ def configure_web_acl(resource_properties, old_resource_properties):
     # Get Current Rule List
     #------------------------------------------------------------------------------------------------------------------
     current_rules = {}
-    waf_client = boto3.client(environ['API_TYPE'])
-    for attempt in range(API_CALL_NUM_RETRIES):
-        try:
-            response = waf_client.get_web_acl(WebACLId=resource_properties['WAFWebACL'])
-            for rule in response['WebACL']['Rules']:
-                current_rules[rule['RuleId']] = {
-                    'Type': rule['Type'],
-                    'Priority': rule['Priority'],
-                    'Action': rule['Action'],
-                }
-
-        except Exception as error:
-            logging.getLogger().error(str(error))
-            delay = math.pow(2, attempt)
-            logging.getLogger().info("[configure_web_acl] Retrying in %d seconds..." % (delay))
-            time.sleep(delay)
-
-        else:
-            break
-
-    else:
-        raise Exception("[configure_web_acl] Failed ALL attempts to retrieve current rule list")
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    response = waf_client.get_web_acl(WebACLId=resource_properties['WAFWebACL'])
+    for rule in response['WebACL']['Rules']:
+        current_rules[rule['RuleId']] = {
+            'Type': rule['Type'],
+            'Priority': rule['Priority'],
+            'Action': rule['Action'],
+        }
 
     #------------------------------------------------------------------------------------------------------------------
     # For each protection, check if the rule needs to added to the web_acl
     #------------------------------------------------------------------------------------------------------------------
     updates = []
-    updates.append(process_rule_inclusion(10, 'ALLOW', 'REGULAR', None, 'WAFWhitelistRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(20, 'BLOCK', 'REGULAR', None, 'WAFBlacklistRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(30, 'BLOCK', 'REGULAR', 'SqlInjectionProtectionActivated', 'WAFSqlInjectionRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(40, 'BLOCK', 'REGULAR', 'CrossSiteScriptingProtectionActivated', 'WAFXssRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(50, 'BLOCK', 'RATE_BASED', 'HttpFloodProtectionActivated', 'RateBasedRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(60, 'BLOCK', 'REGULAR', 'ScannersProbesProtectionActivated', 'WAFScannersProbesRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(70, 'BLOCK', 'REGULAR', 'ReputationListsProtectionActivated', 'WAFIPReputationListsRule', resource_properties, current_rules))
-    updates.append(process_rule_inclusion(90, 'BLOCK', 'REGULAR', 'BadBotProtectionActivated', 'WAFBadBotRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(10, resource_properties['ActionWAFWhitelistRule'], 'REGULAR', None, 'WAFWhitelistRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(20, resource_properties['ActionWAFBlacklistRule'], 'REGULAR', None, 'WAFBlacklistRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(30, resource_properties['ActionWAFSqlInjectionRule'], 'REGULAR', 'ProtectionActivatedSqlInjection', 'WAFSqlInjectionRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(40, resource_properties['ActionWAFXssRule'], 'REGULAR', 'ProtectionActivatedCrossSiteScripting', 'WAFXssRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(50, resource_properties['ActionWAFHttpFloodRateBasedRule'], 'RATE_BASED', 'ProtectionActivatedHttpFloodRateBased', 'WAFHttpFloodRateBasedRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(55, resource_properties['ActionWAFHttpFloodRegularRule'], 'REGULAR', 'ProtectionActivatedHttpFloodRegular', 'WAFHttpFloodRegularRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(60, resource_properties['ActionWAFScannersProbesRule'], 'REGULAR', 'ProtectionActivatedScannersProbes', 'WAFScannersProbesRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(70, resource_properties['ActionWAFIPReputationListsRule'], 'REGULAR', 'ProtectionActivatedReputationLists', 'WAFIPReputationListsRule', resource_properties, current_rules))
+    updates.append(process_rule_inclusion(90, resource_properties['ActionWAFBadBotRule'], 'REGULAR', 'ProtectionActivatedBadBot', 'WAFBadBotRule', resource_properties, current_rules))
 
     if old_resource_properties:
-        updates.append(process_rule_exclusion('SqlInjectionProtectionActivated', 'WAFSqlInjectionRule', resource_properties, old_resource_properties, current_rules))
-        updates.append(process_rule_exclusion('CrossSiteScriptingProtectionActivated', 'WAFXssRule', resource_properties, old_resource_properties, current_rules))
-        updates.append(process_rule_exclusion('HttpFloodProtectionActivated', 'RateBasedRule', resource_properties, old_resource_properties, current_rules))
-        updates.append(process_rule_exclusion('ScannersProbesProtectionActivated', 'WAFScannersProbesRule', resource_properties, old_resource_properties, current_rules))
-        updates.append(process_rule_exclusion('ReputationListsProtectionActivated', 'WAFIPReputationListsRule', resource_properties, old_resource_properties, current_rules))
-        updates.append(process_rule_exclusion('BadBotProtectionActivated', 'WAFBadBotRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedSqlInjection', 'WAFSqlInjectionRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedCrossSiteScripting', 'WAFXssRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedHttpFloodRateBased', 'WAFHttpFloodRateBasedRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedHttpFloodRegular', 'WAFHttpFloodRegularRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedScannersProbes', 'WAFScannersProbesRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedReputationLists', 'WAFIPReputationListsRule', resource_properties, old_resource_properties, current_rules))
+        updates.append(process_rule_exclusion('ProtectionActivatedBadBot', 'WAFBadBotRule', resource_properties, old_resource_properties, current_rules))
 
     #------------------------------------------------------------------------------------------------------------------
     # Clean invalid update elements
@@ -408,32 +334,18 @@ def clean_web_acl(web_acl_id):
     # Get current rule list to be removed from the web ACL
     #------------------------------------------------------------------------------------------------------------------
     updates = []
-    waf_client = boto3.client(environ['API_TYPE'])
-    for attempt in range(API_CALL_NUM_RETRIES):
-        try:
-            response = waf_client.get_web_acl(WebACLId=web_acl_id)
-            for rule in response['WebACL']['Rules']:
-                updates.append({
-                    'Action': 'DELETE',
-                    'ActivatedRule': {
-                        'Priority': rule['Priority'],
-                        'RuleId': rule['RuleId'],
-                        'Action': rule['Action'],
-                        'Type': rule['Type']
-                    }
-                })
-
-        except Exception as error:
-            logging.getLogger().error(str(error))
-            delay = math.pow(2, attempt)
-            logging.getLogger().info("[clean_web_acl] Retrying in %d seconds..." % (delay))
-            time.sleep(delay)
-
-        else:
-            break
-
-    else:
-        raise Exception("[clean_web_acl] Failed ALL attempts to retrieve current rule list")
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    response = waf_client.get_web_acl(WebACLId=web_acl_id)
+    for rule in response['WebACL']['Rules']:
+        updates.append({
+            'Action': 'DELETE',
+            'ActivatedRule': {
+                'Priority': rule['Priority'],
+                'RuleId': rule['RuleId'],
+                'Action': rule['Action'],
+                'Type': rule['Type']
+            }
+        })
 
     #------------------------------------------------------------------------------------------------------------------
     # Update WebACL
@@ -445,43 +357,58 @@ def clean_web_acl(web_acl_id):
 def clean_ip_set(ip_set_id):
     logging.getLogger().debug("[clean_ip_set] Clean IP Set %s"%ip_set_id)
 
-    waf_client = boto3.client(environ['API_TYPE'])
-    for attempt in range(API_CALL_NUM_RETRIES):
-        try:
-            response = waf_client.get_ip_set(IPSetId=ip_set_id)
-            while len(response['IPSet']['IPSetDescriptors']) > 0:
-                counter = 0
-                updates = []
-                for ip in response['IPSet']['IPSetDescriptors']:
-                    updates.append({
-                        'Action': 'DELETE',
-                        'IPSetDescriptor': {
-                            'Type': ip['Type'],
-                            'Value': ip['Value']
-                        }
-                    })
-                    counter += 1
-                    if counter >= BATCH_DELETE_LIMIT:
-                        break
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    response = waf_client.get_ip_set(IPSetId=ip_set_id)
+    while len(response['IPSet']['IPSetDescriptors']) > 0:
+        counter = 0
+        updates = []
+        for ip in response['IPSet']['IPSetDescriptors']:
+            updates.append({
+                'Action': 'DELETE',
+                'IPSetDescriptor': {
+                    'Type': ip['Type'],
+                    'Value': ip['Value']
+                }
+            })
+            counter += 1
+            if counter >= BATCH_DELETE_LIMIT:
+                break
 
-                logging.getLogger().debug("[clean_ip_set] Deleting %d IPs..."%len(updates))
-                waf_client.update_ip_set(
-                    IPSetId=ip_set_id,
-                    ChangeToken=waf_client.get_change_token()['ChangeToken'],
-                    Updates=updates
-                )
-                response = waf_client.get_ip_set(IPSetId=ip_set_id)
+        logging.getLogger().debug("[clean_ip_set] Deleting %d IPs..."%len(updates))
+        waf_client.update_ip_set(
+            IPSetId=ip_set_id,
+            ChangeToken=waf_client.get_change_token()['ChangeToken'],
+            Updates=updates
+        )
+        response = waf_client.get_ip_set(IPSetId=ip_set_id)
+        if len(response['IPSet']['IPSetDescriptors']) > 0:
+            logging.getLogger().debug('[clean_ip_set] Sleep %d sec befone next slot to avoid AWS WAF API throttling ...'%DELAY_BETWEEN_DELETES)
+            time.sleep(DELAY_BETWEEN_DELETES)
 
-        except Exception as error:
-            logging.getLogger().error(str(error))
-            delay = math.pow(2, attempt)
-            logging.getLogger().info("[clean_ip_set] Retrying in %d seconds..." % (delay))
-            time.sleep(delay)
 
-        else:
-            break
-    else:
-        logging.getLogger().debug("[clean_ip_set] Failed ALL attempts to call API")
+#======================================================================================================================
+# Configure AWS WAF Logs
+#======================================================================================================================
+def put_logging_configuration(web_acl_arn, delivery_stream_arn):
+    logging.getLogger().debug("[put_logging_configuration] Start")
+
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    waf_client.put_logging_configuration(
+        LoggingConfiguration = {
+            'ResourceArn': web_acl_arn,
+            'LogDestinationConfigs': [delivery_stream_arn]
+        }
+    )
+
+    logging.getLogger().debug("[put_logging_configuration] End")
+
+def delete_logging_configuration(web_acl_arn):
+    logging.getLogger().debug("[delete_logging_configuration] Start")
+
+    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+    waf_client.delete_logging_configuration(ResourceArn = web_acl_arn)
+
+    logging.getLogger().debug("[delete_logging_configuration] End")
 
 #======================================================================================================================
 # Populate Reputation List
@@ -491,12 +418,15 @@ def populate_reputation_list(region, reputation_lists_parser_function, reputatio
 
     try:
         lambda_client = boto3.client('lambda')
-        response = lambda_client.invoke(
+        lambda_client.invoke(
             FunctionName=reputation_lists_parser_function.rsplit(":",1)[-1],
             Payload="""{
                   "lists": [
                     {
                         "url": "https://www.spamhaus.org/drop/drop.txt"
+                    },
+                    {
+                        "url": "https://www.spamhaus.org/drop/edrop.txt"
                     },
                     {
                         "url": "https://check.torproject.org/exit-addresses",
@@ -520,6 +450,92 @@ def populate_reputation_list(region, reputation_lists_parser_function, reputatio
 
     logging.getLogger().debug("[populate_reputation_list] End")
 
+#======================================================================================================================
+# Generate Log Parser Config File
+#======================================================================================================================
+def generate_app_log_parser_conf_file(stack_name, error_threshold, block_period, app_access_log_bucket, overwrite):
+    logging.getLogger().debug("[generate_app_log_parser_conf_file] Start")
+
+    local_file = '/tmp/' + stack_name + '-app_log_conf_LOCAL.json'
+    remote_file = stack_name + '-app_log_conf.json'
+    default_conf = {
+        'general': {
+            'errorThreshold': error_threshold,
+            'blockPeriod': block_period,
+            'errorCodes': ['400', '401', '403', '404', '405']
+        },
+        'uriList': {
+        }
+    }
+
+    if not overwrite:
+        try:
+            s3 = boto3.resource('s3')
+            file_obj = s3.Object(app_access_log_bucket, remote_file)
+            file_content = file_obj.get()['Body'].read()
+            remote_conf = json.loads(file_content)
+
+            if 'general' in remote_conf and 'errorCodes' in remote_conf['general']:
+                default_conf['general']['errorCodes'] = remote_conf['general']['errorCodes']
+
+            if 'uriList' in remote_conf:
+                default_conf['uriList'] = remote_conf['uriList']
+
+        except Exception as e:
+            logging.getLogger().debug("[generate_app_log_parser_conf_file] \tFailed to merge existing conf file data.")
+            logging.getLogger().debug(e)
+
+    with open(local_file, 'w') as outfile:
+        json.dump(default_conf, outfile)
+
+    s3_client = boto3.client('s3')
+    s3_client.upload_file(local_file, app_access_log_bucket, remote_file, ExtraArgs={'ContentType': "application/json"})
+
+    logging.getLogger().debug("[generate_app_log_parser_conf_file] End")
+
+def generate_waf_log_parser_conf_file(stack_name, request_threshold, block_period, waf_access_log_bucket, overwrite):
+    logging.getLogger().debug("[generate_waf_log_parser_conf_file] Start")
+
+    local_file = '/tmp/' + stack_name + '-waf_log_conf_LOCAL.json'
+    remote_file = stack_name + '-waf_log_conf.json'
+    default_conf = {
+        'general': {
+            'requestThreshold': request_threshold,
+            'blockPeriod': block_period,
+            'ignoredSufixes': []
+        },
+        'uriList': {
+        }
+    }
+
+    if not overwrite:
+        try:
+            s3 = boto3.resource('s3')
+            file_obj = s3.Object(waf_access_log_bucket, remote_file)
+            file_content = file_obj.get()['Body'].read()
+            remote_conf = json.loads(file_content)
+
+            if 'general' in remote_conf and 'ignoredSufixes' in remote_conf['general']:
+                default_conf['general']['ignoredSufixes'] = remote_conf['general']['ignoredSufixes']
+
+            if 'uriList' in remote_conf:
+                default_conf['uriList'] = remote_conf['uriList']
+
+        except Exception as e:
+            logging.getLogger().debug("[generate_waf_log_parser_conf_file] \tFailed to merge existing conf file data.")
+            logging.getLogger().debug(e)
+
+    with open(local_file, 'w') as outfile:
+        json.dump(default_conf, outfile)
+
+    s3_client = boto3.client('s3')
+    s3_client.upload_file(local_file, waf_access_log_bucket, remote_file, ExtraArgs={'ContentType': "application/json"})
+
+    logging.getLogger().debug("[generate_waf_log_parser_conf_file] End")
+
+#======================================================================================================================
+# Auxiliary Functions
+#======================================================================================================================
 def send_response(event, context, responseStatus, responseData, resourceId, reason=None):
     logging.getLogger().debug("[send_response] Start")
 
@@ -558,39 +574,37 @@ def send_response(event, context, responseStatus, responseData, resourceId, reas
     logging.getLogger().debug("[send_response] End")
 
 def send_anonymous_usage_data(action_type, resource_properties):
-    if resource_properties['SendAnonymousUsageData'] != 'yes':
-        return
 
     try:
+        if 'SendAnonymousUsageData' not in resource_properties or resource_properties['SendAnonymousUsageData'].lower() != 'yes':
+            return
         logging.getLogger().debug("[send_anonymous_usage_data] Start")
-        #--------------------------------------------------------------------------------------------------------------
-        logging.getLogger().debug("[send_anonymous_usage_data] Send Data")
-        #--------------------------------------------------------------------------------------------------------------
-        time_now = datetime.datetime.utcnow().isoformat()
-        time_stamp = str(time_now)
+
         usage_data = {
             "Solution": "SO0006",
             "UUID": resource_properties['UUID'],
-            "TimeStamp": time_stamp,
+            "TimeStamp": str(datetime.datetime.utcnow().isoformat()),
             "Data":
             {
-                "Version": "2",
+                "Version": "2.3.0",
                 "data_type" : "custom_resource",
                 "region" : resource_properties['Region'],
                 "action" : action_type,
-                "sql_injection_protection": resource_properties['SqlInjectionProtectionActivated'],
-                "xss_scripting_protection": resource_properties['CrossSiteScriptingProtectionActivated'],
-                "http_flood_protection": resource_properties['HttpFloodProtectionActivated'],
-                "scanners_probes_protection": resource_properties['ScannersProbesProtectionActivated'],
-                "reputation_lists_protection": resource_properties['ReputationListsProtectionActivated'],
-                "bad_bot_protection": resource_properties['BadBotProtectionActivated'],
+                "sql_injection_protection": resource_properties['ActivateSqlInjectionProtectionParam'],
+                "xss_scripting_protection": resource_properties['ActivateCrossSiteScriptingProtectionParam'],
+                "http_flood_protection": resource_properties['ActivateHttpFloodProtectionParam'],
+                "scanners_probes_protection": resource_properties['ActivateScannersProbesProtectionParam'],
+                "reputation_lists_protection": resource_properties['ActivateReputationListsProtectionParam'],
+                "bad_bot_protection": resource_properties['ActivateBadBotProtectionParam'],
                 "request_threshold": resource_properties['RequestThreshold'],
                 "error_threshold": resource_properties['ErrorThreshold'],
-                "waf_block_period": resource_properties['WAFBlockPeriod'],
-                "lifecycle" : 0
+                "waf_block_period": resource_properties['WAFBlockPeriod']
             }
         }
 
+        #--------------------------------------------------------------------------------------------------------------
+        logging.getLogger().info("[send_anonymous_usage_data] Send Data")
+        #--------------------------------------------------------------------------------------------------------------
         url = 'https://metrics.awssolutionsbuilder.com/generic'
         req = Request(url, method='POST', data=bytes(json.dumps(usage_data), encoding='utf8'), headers={'Content-Type': 'application/json'})
         rsp = urlopen(req)
@@ -599,8 +613,8 @@ def send_anonymous_usage_data(action_type, resource_properties):
         logging.getLogger().debug("[send_anonymous_usage_data] End")
 
     except Exception as error:
-        logging.getLogger().error("[send_anonymous_usage_data] Failed to Send Data")
-        logging.getLogger().error(str(error))
+        logging.getLogger().debug("[send_anonymous_usage_data] Failed to Send Data")
+        logging.getLogger().debug(str(error))
 
 #======================================================================================================================
 # Lambda Entry Point
@@ -635,33 +649,70 @@ def lambda_handler(event, context):
         #----------------------------------------------------------
         # Process event
         #----------------------------------------------------------
-        if event['ResourceType'] == "Custom::CreateUUID":
-            if 'CREATE' in request_type:
-                responseData['UUID'] = str(uuid.uuid4())
-                logging.getLogger().debug("UUID: %s"%responseData['UUID'])
+        if event['ResourceType'] == "Custom::ConfigureAppAccessLogBucket":
+            lambda_log_parser_function = event['ResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['ResourceProperties'] else None
+            lambda_parser = True if event['ResourceProperties']['ScannersProbesLambdaLogParser'] == 'yes' else False
+            athena_parser = True if event['ResourceProperties']['ScannersProbesAthenaLogParser'] == 'yes' else False
 
-            # UPDATE: do nothing
-            # DELETE: do nothing
-
-        elif event['ResourceType'] == "Custom::ConfigureAccessLogBucket":
             if 'CREATE' in request_type:
-                configure_s3_bucket(event['ResourceProperties']['Region'],
-                    event['ResourceProperties']['AccessLogBucket'],
-                    event['ResourceProperties']['LambdaWAFLogParserFunction'])
+                configure_s3_bucket(event['ResourceProperties']['Region'], event['ResourceProperties']['AppAccessLogBucket'])
+                add_s3_bucket_lambda_event(event['ResourceProperties']['AppAccessLogBucket'],
+                    lambda_log_parser_function,
+                    lambda_parser,
+                    athena_parser)
 
             elif 'UPDATE' in request_type:
-                if (event['OldResourceProperties']['AccessLogBucket'] != event['ResourceProperties']['AccessLogBucket'] or
-                        event['OldResourceProperties']['LambdaWAFLogParserFunction'] != event['ResourceProperties']['LambdaWAFLogParserFunction']):
+                old_lambda_app_log_parser_function = event['OldResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['OldResourceProperties'] else None
+                old_lambda_parser = True if event['OldResourceProperties']['ScannersProbesLambdaLogParser'] == 'yes' else False
+                old_athena_parser = True if event['OldResourceProperties']['ScannersProbesAthenaLogParser'] == 'yes' else False
 
-                    remove_s3_bucket_lambda_event(event['OldResourceProperties']["AccessLogBucket"],
-                        event['OldResourceProperties']['LambdaWAFLogParserFunction'])
-                    configure_s3_bucket(event['ResourceProperties']['Region'],
-                        event['ResourceProperties']['AccessLogBucket'],
-                        event['ResourceProperties']['LambdaWAFLogParserFunction'])
+                if (event['OldResourceProperties']['AppAccessLogBucket'] != event['ResourceProperties']['AppAccessLogBucket'] or
+                        old_lambda_app_log_parser_function != lambda_log_parser_function or
+                        old_lambda_parser != lambda_parser or
+                        old_athena_parser != athena_parser):
+
+                    remove_s3_bucket_lambda_event(event['OldResourceProperties']["AppAccessLogBucket"],
+                        old_lambda_app_log_parser_function)
+                    add_s3_bucket_lambda_event(event['ResourceProperties']['AppAccessLogBucket'],
+                        lambda_log_parser_function,
+                        lambda_parser,
+                        athena_parser)
 
             elif 'DELETE' in request_type:
-                remove_s3_bucket_lambda_event(event['ResourceProperties']["AccessLogBucket"],
-                    event['ResourceProperties']['LambdaWAFLogParserFunction'])
+                remove_s3_bucket_lambda_event(event['ResourceProperties']["AppAccessLogBucket"],
+                    lambda_log_parser_function)
+
+        elif event['ResourceType'] == "Custom::ConfigureWafLogBucket":
+            lambda_log_parser_function = event['ResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['ResourceProperties'] else None
+            lambda_parser = True if event['ResourceProperties']['HttpFloodLambdaLogParser'] == 'yes' else False
+            athena_parser = True if event['ResourceProperties']['HttpFloodAthenaLogParser'] == 'yes' else False
+
+            if 'CREATE' in request_type:
+                add_s3_bucket_lambda_event(event['ResourceProperties']['WafLogBucket'],
+                    lambda_log_parser_function,
+                    lambda_parser,
+                    athena_parser)
+
+            elif 'UPDATE' in request_type:
+                old_lambda_app_log_parser_function = event['OldResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['OldResourceProperties'] else None
+                old_lambda_parser = True if event['OldResourceProperties']['HttpFloodLambdaLogParser'] == 'yes' else False
+                old_athena_parser = True if event['OldResourceProperties']['HttpFloodAthenaLogParser'] == 'yes' else False
+
+                if (event['OldResourceProperties']['WafLogBucket'] != event['ResourceProperties']['WafLogBucket'] or
+                        old_lambda_app_log_parser_function != lambda_log_parser_function or
+                        old_lambda_parser != lambda_parser or
+                        old_athena_parser != athena_parser):
+
+                    remove_s3_bucket_lambda_event(event['OldResourceProperties']["WafLogBucket"],
+                        old_lambda_app_log_parser_function)
+                    add_s3_bucket_lambda_event(event['ResourceProperties']['WafLogBucket'],
+                        lambda_log_parser_function,
+                        lambda_parser,
+                        athena_parser)
+
+            elif 'DELETE' in request_type:
+                remove_s3_bucket_lambda_event(event['ResourceProperties']["WafLogBucket"],
+                    lambda_log_parser_function)
 
         elif event['ResourceType'] == "Custom::ConfigureRateBasedRule":
             if 'CREATE' in request_type:
@@ -703,6 +754,45 @@ def lambda_handler(event, context):
                 populate_reputation_list(event['ResourceProperties']['Region'],
                     event['ResourceProperties']['LambdaWAFReputationListsParserFunction'],
                     event['ResourceProperties']['WAFReputationListsSet'])
+
+            # DELETE: do nothing
+
+        elif event['ResourceType'] == "Custom::ConfigureAWSWAFLogs":
+            if 'CREATE' in request_type:
+                put_logging_configuration(event['ResourceProperties']['WAFWebACLArn'],
+                    event['ResourceProperties']['DeliveryStreamArn'])
+
+            elif 'UPDATE' in request_type:
+                delete_logging_configuration(event['OldResourceProperties']['WAFWebACLArn'])
+                put_logging_configuration(event['ResourceProperties']['WAFWebACLArn'],
+                    event['ResourceProperties']['DeliveryStreamArn'])
+
+            elif 'DELETE' in request_type:
+                delete_logging_configuration(event['ResourceProperties']['WAFWebACLArn'])
+
+        elif event['ResourceType'] == "Custom::GenerateAppLogParserConfFile":
+            stack_name = event['ResourceProperties']['StackName']
+            error_threshold = int(event['ResourceProperties']['ErrorThreshold'])
+            block_period = int(event['ResourceProperties']['WAFBlockPeriod'])
+            app_access_log_bucket = event['ResourceProperties']['AppAccessLogBucket']
+
+            if 'CREATE' in request_type:
+                generate_app_log_parser_conf_file(stack_name, error_threshold, block_period, app_access_log_bucket, True)
+            elif 'UPDATE' in request_type:
+                generate_app_log_parser_conf_file(stack_name, error_threshold, block_period, app_access_log_bucket, False)
+
+            # DELETE: do nothing
+
+        elif event['ResourceType'] == "Custom::GenerateWafLogParserConfFile":
+            stack_name = event['ResourceProperties']['StackName']
+            request_threshold = int(event['ResourceProperties']['RequestThreshold'])
+            block_period = int(event['ResourceProperties']['WAFBlockPeriod'])
+            waf_access_log_bucket = event['ResourceProperties']['WafAccessLogBucket']
+
+            if 'CREATE' in request_type:
+                generate_waf_log_parser_conf_file(stack_name, request_threshold, block_period, waf_access_log_bucket, True)
+            elif 'UPDATE' in request_type:
+                generate_waf_log_parser_conf_file(stack_name, request_threshold, block_period, waf_access_log_bucket, False)
 
             # DELETE: do nothing
 
