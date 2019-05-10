@@ -327,7 +327,7 @@ Resources:
         Parameters: {"skip.header.line.count": "2", "EXTERNAL": "TRUE"}
         StorageDescriptor:
           Location: !Sub
-            - "s3://${AppAccessLogBucket}/AWSLogs/"
+            - "s3://${AppAccessLogBucket}/"
             - {"AppAccessLogBucket" : !Ref AppAccessLogBucket}
           InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
           OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
