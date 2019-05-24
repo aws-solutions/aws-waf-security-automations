@@ -18,6 +18,7 @@ import json
 import logging
 import datetime
 import time
+import socket
 from os import environ
 from ipaddress import ip_address
 from botocore.config import Config
@@ -527,6 +528,21 @@ def get_outstanding_requesters(bucket_name, key_name, log_type):
     except Exception as e:
         logging.getLogger().error("[get_outstanding_requesters] \tError to read input file")
         logging.getLogger().error(e)
+
+    if 'whitelisted_domains' in config['general'] and len(config['general']['whitelisted_domains']) > 0:
+        #--------------------------------------------------------------------------------------------------------------
+        logging.getLogger().info("[get_outstanding_requesters] \tRemove whitelisted domains PTR")
+        #--------------------------------------------------------------------------------------------------------------
+        for k in outstanding_requesters['general'][k]:
+            hostname=socket.gethostbyaddr(k)[0]
+            if any(s in hostname for s in config['general']['whitelisted_domains']):
+                outstanding_requesters['general'].pop(k)
+
+        for uri in outstanding_requesters['uriList']:
+            for k in uri:
+                hostname=socket.gethostbyaddr(k)[0]
+                if any(s in hostname for s in config['general']['whitelisted_domains']):
+                    outstanding_requesters['uriList'][uri].pop(k)
 
     logging.getLogger().debug('[get_outstanding_requesters] End')
     return outstanding_requesters
