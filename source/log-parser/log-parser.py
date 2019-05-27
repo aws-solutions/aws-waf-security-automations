@@ -533,15 +533,23 @@ def get_outstanding_requesters(bucket_name, key_name, log_type):
         #--------------------------------------------------------------------------------------------------------------
         logging.getLogger().info("[get_outstanding_requesters] \tRemove whitelisted domains PTR")
         #--------------------------------------------------------------------------------------------------------------
-        for k in outstanding_requesters['general'][k]:
-            hostname=socket.gethostbyaddr(k)[0]
+        for k in outstanding_requesters['general']:
+            try:
+                hostname=socket.gethostbyaddr(k)[0]
+            except Exception as e:
+                continue
             if any(s in hostname for s in config['general']['whitelisted_domains']):
+                logging.getLogger().info("[get_outstanding_requesters] \tRemove whitelisted domains PTR : %s - %s"%(k,hostname))
                 outstanding_requesters['general'].pop(k)
 
         for uri in outstanding_requesters['uriList']:
             for k in uri:
-                hostname=socket.gethostbyaddr(k)[0]
+                try:
+                    hostname=socket.gethostbyaddr(k)[0]
+                except Exception as e:
+                    continue
                 if any(s in hostname for s in config['general']['whitelisted_domains']):
+                    logging.getLogger().info("[get_outstanding_requesters] \tRemove whitelisted domains PTR : %s - %s"%(k,hostname))
                     outstanding_requesters['uriList'][uri].pop(k)
 
     logging.getLogger().debug('[get_outstanding_requesters] End')
