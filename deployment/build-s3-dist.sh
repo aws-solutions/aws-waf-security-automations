@@ -2,22 +2,21 @@
 #
 # This assumes all of the OS-level configuration has been completed and git repo has already been cloned
 #
-# This script should be run from the repo's deployment directory
-# cd deployment
-# ./build-s3-dist.sh source-bucket-base-name version-code
+# This script should be run from the repo's deployment directory:
+# $> cd deployment
+# $> ./build-s3-dist.sh source-bucket-base-name version-code
 #
 # Paramenters:
 #  - source-bucket-base-name: Name for the S3 bucket location where the template will source the Lambda
 #    code from. The template will append '-[region_name]' to this bucket name.
 #    For example: ./build-s3-dist.sh solutions v2.3.0
 #    The template will then expect the source code to be located in the solutions-[region_name] bucket
-#
 #  - version-code: version of the package
 
 # Check to see if input has been provided:
 if [ -z "$1" ] || [ -z "$2" ]; then
     echo "Please provide the base source bucket name and version where the lambda code will eventually reside."
-    echo "For example: ./build-s3-dist.sh solutions v2.2"
+    echo "For example: ./build-s3-dist.sh solutions v2.3.0"
     exit 1
 fi
 
@@ -54,27 +53,27 @@ cp -f "$template_dir/aws-waf-security-automations-alb.template" "$dist_dir"
 echo "cp -f $template_dir/aws-waf-security-automations-firehose-athena.template dist"
 cp -f "$template_dir/aws-waf-security-automations-firehose-athena.template" "$dist_dir"
 
-echo "Updating code source bucket in template with $1"
-replace="s/%%BUCKET_NAME%%/$1/g"
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations.template
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-cloudfront.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-cloudfront.template
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-alb.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-alb.template
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-firehose-athena.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-firehose-athena.template
+echo "Updating code source bucket in template with '$1'"
+replace="s,%%BUCKET_NAME%%,$1,g"
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations.template
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations-cloudfront.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations-cloudfront.template
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations-alb.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations-alb.template
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations-firehose-athena.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations-firehose-athena.template
 
-echo "Updating code source version in template with $2"
-replace="s/%%VERSION%%/$2/g"
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations.template
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-cloudfront.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-cloudfront.template
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-alb.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-alb.template
-echo "sed -i '' -e $replace $dist_dir/aws-waf-security-automations-firehose-athena.template"
-sed -i '' -e "$replace" "$dist_dir"/aws-waf-security-automations-firehose-athena.template
+echo "Updating code source version in template with '$2'"
+replace="s,%%VERSION%%,$2,g"
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations.template
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations-cloudfront.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations-cloudfront.template
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations-alb.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations-alb.template
+echo "perl -pi -e $replace $dist_dir/aws-waf-security-automations-firehose-athena.template"
+perl -pi -e "$replace" "$dist_dir"/aws-waf-security-automations-firehose-athena.template
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Log Parser"
