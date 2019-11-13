@@ -549,7 +549,7 @@ Resources:
       Code:
         S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "S3Bucket"], !Ref 'AWS::Region']]
         S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'reputation-lists-parser.zip']]
-      Runtime: nodejs8.10
+      Runtime: nodejs10.x
       MemorySize: 256
       Timeout: 300
       Environment:
