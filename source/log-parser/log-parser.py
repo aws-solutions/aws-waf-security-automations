@@ -1,15 +1,15 @@
-#####################################################################################################################
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
-#                                                                                                                   #
-# Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance        #
-# with the License. A copy of the License is located at                                                             #
-#                                                                                                                   #
-#     http://aws.amazon.com/asl/                                                                                    #
-#                                                                                                                   #
-# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
-# OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
-# and limitations under the License.                                                                                #
-#####################################################################################################################
+######################################################################################################################
+#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#                                                                                                                    #
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
+#  with the License. A copy of the License is located at                                                             #
+#                                                                                                                    #
+#      http://www.apache.org/licenses/LICENSE-2.0                                                                    #
+#                                                                                                                    #
+#  or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
+#  and limitations under the License.                                                                                #
+######################################################################################################################
 
 import boto3
 import csv
@@ -18,12 +18,13 @@ import json
 import logging
 import datetime
 import time
-from os import environ
+from os import environ, remove
 from ipaddress import ip_address
 from botocore.config import Config
 from urllib.parse import unquote_plus
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
+from backoff import on_exception, expo
 
 logging.getLogger().debug('Loading function')
 
@@ -55,15 +56,30 @@ LINE_FORMAT_ALB = {
 }
 
 waf = None
+if environ['LOG_TYPE'] == 'alb':
+    session = boto3.session.Session(region_name=environ['REGION'])
+    waf = session.client('waf-regional', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+else:
+    waf = boto3.client('waf', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 config = {}
 
 #======================================================================================================================
 # Auxiliary Functions
 #======================================================================================================================
+@on_exception(expo, waf.exceptions.WAFStaleDataException, max_time=10)
 def waf_get_ip_set(ip_set_id):
     logging.getLogger().debug('[waf_get_ip_set] Start')
     response = waf.get_ip_set(IPSetId=ip_set_id)
     logging.getLogger().debug('[waf_get_ip_set] End')
+    return response
+
+@on_exception(expo, waf.exceptions.WAFStaleDataException, max_time=10)
+def waf_update_ip_set(ip_set_id, updates):
+    logging.getLogger().debug('[waf_update_ip_set] Start')
+    response = waf.update_ip_set(IPSetId=ip_set_id,
+        ChangeToken=waf.get_change_token()['ChangeToken'],
+        Updates=updates)
+    logging.getLogger().debug('[waf_update_ip_set] End')
     return response
 
 def waf_commit_updates(ip_set_id, updates_list):
@@ -74,11 +90,7 @@ def waf_commit_updates(ip_set_id, updates_list):
         index = 0
         while index < len(updates_list):
             logging.getLogger().debug('[waf_commit_updates] Processing from index %d.'%index)
-
-            response = waf.update_ip_set(IPSetId=ip_set_id,
-                ChangeToken=waf.get_change_token()['ChangeToken'],
-                Updates=updates_list[index: index + MAX_DESCRIPTORS_PER_IP_SET_UPDATE])
-
+            response = waf_update_ip_set(ip_set_id, updates_list[index: index + MAX_DESCRIPTORS_PER_IP_SET_UPDATE])
             index += MAX_DESCRIPTORS_PER_IP_SET_UPDATE
             if index < len(updates_list):
                 logging.getLogger().debug('[waf_commit_updates] Sleep %d sec befone next slot to avoid AWS WAF API throttling ...'%DELAY_BETWEEN_UPDATES)
@@ -374,6 +386,7 @@ def process_athena_result(bucket_name, key_name, ip_set_id):
                     "max_counter_per_min": row['max_counter_per_min'],
                     "updated_at": utc_now_timestamp_str
                 }
+        remove(local_file_path)
 
         #--------------------------------------------------------------------------------------------------------------
         logging.getLogger().info("[process_athena_result] \tUpdate WAF IP Set")
@@ -490,6 +503,7 @@ def get_outstanding_requesters(bucket_name, key_name, log_type):
 
                 except Exception as e:
                     logging.getLogger().error("[get_outstanding_requesters] \t\tError to process line: %s"%line)
+        remove(local_file_path)
 
         #--------------------------------------------------------------------------------------------------------------
         logging.getLogger().info("[get_outstanding_requesters] \tKeep only outstanding requesters")
@@ -570,6 +584,7 @@ def merge_outstanding_requesters(bucket_name, key_name, log_type, output_key_nam
     }
     with open(local_file_path, 'r') as file_content:
         remote_outstanding_requesters = json.loads(file_content.read())
+    remove(local_file_path)
 
     threshold = 'requestThreshold' if log_type == 'waf' else "errorThreshold"
     try:
@@ -665,6 +680,7 @@ def write_output(bucket_name, key_name, output_key_name, outstanding_requesters)
 
         s3 = boto3.client('s3')
         s3.upload_file(current_data, bucket_name, output_key_name, ExtraArgs={'ContentType': "application/json"})
+        remove(current_data)
 
     except Exception as e:
         logging.getLogger().error("[write_output] \tError to write output file")
@@ -716,16 +732,6 @@ def lambda_handler(event, context):
         if log_level not in ['DEBUG', 'INFO','WARNING', 'ERROR','CRITICAL']:
             log_level = 'ERROR'
         logging.getLogger().setLevel(log_level)
-
-        #------------------------------------------------------------------
-        # Set WAF API Level
-        #------------------------------------------------------------------
-        global waf
-        if environ['LOG_TYPE'] == 'alb':
-            session = boto3.session.Session(region_name=environ['REGION'])
-            waf = session.client('waf-regional', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
-        else:
-            waf = boto3.client('waf', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
         #----------------------------------------------------------
         # Process event
@@ -787,4 +793,3 @@ def lambda_handler(event, context):
 
     logging.getLogger().debug('[lambda_handler] End')
     return result
-

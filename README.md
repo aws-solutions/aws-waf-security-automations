@@ -22,7 +22,7 @@ This project consists of microservices that facilitate the functional areas of t
 The following procedures assumes that all of the OS-level configuration has been completed. They are:
 
 * [AWS Command Line Interface](https://aws.amazon.com/cli/)
-* Node.js 8.x
+* Node.js 10.x
 * Python 3.x
 
 The AWS WAF Security Automations solution is developed with Node.js and Python for the microservices that run in AWS Lambda. The latest version has been tested with Node.js v8.10 and Python v3.7.
@@ -36,25 +36,21 @@ git clone https://github.com/awslabs/aws-waf-security-automations.git
 
 #### 03. Declare enviroment variables:
 ```
-export AWS_REGION=<aws-region-code>
-export VERSION_CODE=<version-code>
-export DEPLOY_BUCKET=<source-bucket-base-name>
+export TEMPLATE_BUCKET_NAME=<YOUR_TEMPLATE_BUCKET_NAME>
+export DIST_BUCKET_NAME=<YOUR_DIST_BUCKET_NAME>
+export SOLUTION_NAME="workspaces-cost-optimizer"
+export VERSION=<VERSION>
+## NOTE THAT the region is appended to the DIST_BUCKET_NAME (DIST_BUCKET_NAME-REGION) when deployed, so creating a bucket with only Bucket_Name will not work.
 ```
-- **aws-region-code**: AWS region code. Ex: ```us-east-1```.
-- **version-code**: version of the package. EX: ```v2.2```.
-- **source-bucket-base-name**: Name for the S3 bucket location where the template will source the Lambda code from. The template will append ```-[aws-region-code]``` to this bucket name. For example: ```./build-s3-dist.sh solutions v2.2```, the template will then expect the source code to be located in the ```solutions-[aws-region-code]``` bucket.
-
 #### 04. Build the AWS WAF Security Automations solution for deployment:
 ```
-cd ./aws-waf-security-automations/deployment
-chmod +x build-s3-dist.sh
-./build-s3-dist.sh $DEPLOY_BUCKET $VERSION_CODE
+chmod +x ./build-s3-dist.sh && ./build-s3-dist.sh $TEMPLATE_OUTPUT_BUCKET $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
 ```
 
 #### 05. Upload deployment assets to your Amazon S3 bucket:
 ```
-aws s3 cp ./dist s3://$DEPLOY_BUCKET-$AWS_REGION/aws-waf-security-automations/latest --recursive --acl bucket-owner-full-control
-aws s3 cp ./dist s3://$DEPLOY_BUCKET-$AWS_REGION/aws-waf-security-automations/$VERSION_CODE --recursive --acl bucket-owner-full-control
+aws s3 cp ./dist s3://$DIST_BUCKET_NAME-$AWS_REGION/aws-waf-security-automations/latest --recursive --acl bucket-owner-full-control
+aws s3 cp ./dist s3://$DIST_BUCKET_NAME-$AWS_REGION/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
 ```
 
 #### 06. Deploy the AWS WAF Security Automations solution:
@@ -65,8 +61,14 @@ aws s3 cp ./dist s3://$DEPLOY_BUCKET-$AWS_REGION/aws-waf-security-automations/$V
 
 Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
-Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance with the License. A copy of the License is located at
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-    http://aws.amazon.com/asl/
+    http://www.apache.org/licenses/LICENSE-2.0
 
-or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions and limitations under the License.
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.

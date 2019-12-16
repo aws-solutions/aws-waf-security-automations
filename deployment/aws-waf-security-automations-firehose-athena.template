@@ -1,19 +1,25 @@
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# You may not use this file except in compliance with the License.
+# A copy of the License is located at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# or in the "license" file accompanying this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing
+# permissions and limitations under the License.
+
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-FA) - AWS WAF Security Automations - FA %%VERSION%%: This AWS CloudFormation template helps
+  (SO0006-FA) - AWS WAF Security Automations - FA %VERSION%: This AWS CloudFormation template helps
   you provision the AWS WAF Security Automations stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
   **WARNING** This template creates an AWS Lambda function, an AWS WAF Web ACL, an Amazon S3 bucket,
   and an Amazon CloudWatch custom metric. You will be billed for the AWS resources used if you
   create a stack from this template.
-
-  **NOTICE** Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved. Licensed under
-  the Amazon Software License (the License). You may not use this file except in compliance with the
-  License. A copy of the License is located at http://aws.amazon.com/asl/ or in the license file
-  accompanying this file. This file is distributed on an AS IS BASIS, WITHOUT WARRANTIES OR
-  CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing
-  permissions and limitations under the License.
 
 Parameters:
   ActivateHttpFloodProtectionParam:
@@ -126,6 +132,13 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/${DeliveryStreamName}:*'
+      Metadata:
+        cfn_nag:
+          rules_to_suppress:
+            -
+              id: W11
+              reason: "S3Access restricted to WafLogBucket and CloudWatchAccess to DeliveryStreamName."
+
 
   FirehoseWAFLogsDeliveryStream:
     Type: AWS::KinesisFirehose::DeliveryStream
