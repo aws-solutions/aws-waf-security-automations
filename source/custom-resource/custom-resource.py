@@ -33,7 +33,7 @@ API_CALL_NUM_RETRIES = 5
 LIST_LIMIT  = 50
 BATCH_DELETE_LIMIT = 500
 DELAY_BETWEEN_DELETES = 2
-RULE_SUFIX_RATE_BASED = "-HTTP Flood Rule"
+RULE_SUFIX_RATE_BASED = " - HTTP Flood Rule"
 
 waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
