@@ -121,4 +121,8 @@ echo "--------------------------------------------------------------------------
 echo "[Packing] Helper"
 echo "------------------------------------------------------------------------------"
 cd "$source_dir"/helper || exit 1
+pip install -r requirements.txt --target ./package
+cd "$source_dir"/helper/package || exit 1
 zip -q -r9 "$build_dist_dir"/helper.zip ./*
+cd "$source_dir"/helper || exit 1
+zip -g "$build_dist_dir"/helper.zip helper.py

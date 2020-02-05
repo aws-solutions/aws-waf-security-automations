@@ -8,3 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Fixed error handling of intermittent issue: (WAFStaleDataException) when calling the UpdateWebACL
 - Upgrade from Node 8 to Node 10 for Lambda function
+## [2.3.2] - 2020-02-05
+### Added
+### Changed
+- Fixed README file to accurately reflect script params
+- Upgraded from Python 3.7 to 3.8
+- Changed RequestThreshold min limit from 2000 to 100

@@ -16,3 +16,4 @@ async under the Massachusetts Institute of Technology (MIT) license
 sax under the Internet Systems Consortium (ISC) license
 xml2js under the Massachusetts Institute of Technology (MIT) license
 xmlbuilder under the Massachusetts Institute of Technology (MIT) license
+requests under the Apache Software License

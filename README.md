@@ -23,9 +23,9 @@ The following procedures assumes that all of the OS-level configuration has been
 
 * [AWS Command Line Interface](https://aws.amazon.com/cli/)
 * Node.js 10.x
-* Python 3.x
+* Python 3.8
 
-The AWS WAF Security Automations solution is developed with Node.js and Python for the microservices that run in AWS Lambda. The latest version has been tested with Node.js v8.10 and Python v3.7.
+The AWS WAF Security Automations solution is developed with Node.js and Python for the microservices that run in AWS Lambda. The latest version has been tested with Node.js v10.x and Python v3.8.
 
 #### 02. Clone AWS WAF Security Automations repository
 Clone the aws-waf-security-automations GitHub repository:
@@ -36,21 +36,23 @@ git clone https://github.com/awslabs/aws-waf-security-automations.git
 
 #### 03. Declare enviroment variables:
 ```
-export TEMPLATE_BUCKET_NAME=<YOUR_TEMPLATE_BUCKET_NAME>
-export DIST_BUCKET_NAME=<YOUR_DIST_BUCKET_NAME>
+export TEMPLATE_OUTPUT_BUCKET=<YOUR_TEMPLATE_OUTPUT_BUCKET>
+export DIST_OUTPUT_BUCKET=<YOUR_DIST_OUTPUT_BUCKET>
 export SOLUTION_NAME="workspaces-cost-optimizer"
 export VERSION=<VERSION>
-## NOTE THAT the region is appended to the DIST_BUCKET_NAME (DIST_BUCKET_NAME-REGION) when deployed, so creating a bucket with only Bucket_Name will not work.
-```
+export AWS_REGION=<AWS_REGION>
+
 #### 04. Build the AWS WAF Security Automations solution for deployment:
 ```
 chmod +x ./build-s3-dist.sh && ./build-s3-dist.sh $TEMPLATE_OUTPUT_BUCKET $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
 ```
-
 #### 05. Upload deployment assets to your Amazon S3 bucket:
 ```
-aws s3 cp ./dist s3://$DIST_BUCKET_NAME-$AWS_REGION/aws-waf-security-automations/latest --recursive --acl bucket-owner-full-control
-aws s3 cp ./dist s3://$DIST_BUCKET_NAME-$AWS_REGION/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
+# Note that you must manually create a bucket in S3 called $DIST_OUTPUT_BUCKET-$AWS_REGION to copy the distribution. The
+# build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
+
+aws s3 cp ./dist s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/latest --recursive --acl bucket-owner-full-control
+aws s3 cp ./dist s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
 ```
 
 #### 06. Deploy the AWS WAF Security Automations solution:

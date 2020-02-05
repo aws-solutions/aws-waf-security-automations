@@ -156,12 +156,12 @@ Parameters:
 
   RequestThreshold:
     Type: Number
-    Default: 2000
+    Default: 100
     MinValue: 0
     Description:  >-
       If you chose yes for the Activate HTTP Flood Protection parameter, enter the maximum
       acceptable requests per FIVE-minute period per IP address. Please note that AWS WAF rate
-      based rule requires values greater than 2000 (if you chose Lambda/Athena log parser options,
+      based rule requires values greater than 100 (if you chose Lambda/Athena log parser options,
       you can use any value greater than zero). If you chose to deactivate this protection, ignore
       this parameter.
 
@@ -327,7 +327,7 @@ Resources:
         Variables:
           API_TYPE: !If [AlbEndpoint, 'waf-regional', 'waf']
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 128
       Timeout: 300
 
@@ -496,7 +496,7 @@ Resources:
           STACK_NAME: !Ref 'AWS::StackName'
           IP_SET_ID_HTTP_FLOOD: !If [HttpFloodProtectionLogParserActivated, !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFHttpFloodSet, !GetAtt CloudFrontStack.Outputs.WAFHttpFloodSet], !Ref 'AWS::NoValue']
           IP_SET_ID_SCANNERS_PROBES: !If [ScannersProbesProtectionActivated, !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFScannersProbesSet, !GetAtt CloudFrontStack.Outputs.WAFScannersProbesSet], !Ref 'AWS::NoValue']
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 512
       Timeout: 300
 
@@ -640,7 +640,7 @@ Resources:
           LOG_TYPE: !If [AlbEndpoint, 'alb', 'cloudfront']
           METRIC_NAME_PREFIX: !Join ['', !Split ['-', !Ref 'AWS::StackName']]
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 128
       Timeout: 300
 
@@ -741,7 +741,7 @@ Resources:
         Variables:
           API_TYPE: !If [AlbEndpoint, 'waf-regional', 'waf']
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
-      Runtime: python3.7
+      Runtime: python3.8
       MemorySize: 128
       Timeout: 300
 

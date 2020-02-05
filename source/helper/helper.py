@@ -19,8 +19,8 @@ import uuid
 import re
 import string
 import random
+import requests
 from urllib.request import Request, urlopen
-from botocore.vendored import requests
 from os import environ
 
 logging.getLogger().debug('Loading function')
@@ -155,8 +155,8 @@ def check_requirements(resource_properties):
     # Logging Web ACL Traffic for CloudFront distribution
     #------------------------------------------------------------------------------------------------------------------
     if (resource_properties['HttpFloodProtectionRateBasedRuleActivated'] == "yes" and
-        int(resource_properties['RequestThreshold']) < 2000):
-        raise Exception("The minimum rate-based rule rate limit per 5 minute period is 2000. If need to use values bellow that, please select AWS Lambda or Amazon Athena log parser.")
+        int(resource_properties['RequestThreshold']) < 100):
+        raise Exception("The minimum rate-based rule rate limit per 5 minute period is 100. If need to use values below that, please select AWS Lambda or Amazon Athena log parser.")
 
     logging.getLogger().debug("[check_requirements] End")
 
