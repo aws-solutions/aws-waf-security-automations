@@ -908,15 +908,23 @@ Outputs:
     Description: Bad Bot Honeypot Endpoint
     Value: !Sub 'https://${ApiGatewayBadBot}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayBadBotStage}'
     Condition: BadBotProtectionActivated
+    Export:
+      Name: !Sub "${AWS::StackName}-BadBotHoneypotEndpoint"
 
   WAFWebACL:
     Description: AWS WAF WebACL ID
     Value: !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFWebACL, !GetAtt CloudFrontStack.Outputs.WAFWebACL]
+    Export:
+      Name: !Sub "${AWS::StackName}-WAFWebACL"
 
   WafLogBucket:
     Value: !Ref WafLogBucket
     Condition: HttpFloodProtectionLogParserActivated
+    Export:
+      Name: !Sub "${AWS::StackName}-WafLogBucket"
 
   AppAccessLogBucket:
     Value: !Ref AppAccessLogBucket
     Condition: ScannersProbesProtectionActivated
+    Export:
+      Name: !Sub "${AWS::StackName}-AppAccessLogBucket"
