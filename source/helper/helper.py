@@ -1,14 +1,14 @@
-#####################################################################################################################
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
-#                                                                                                                   #
-# Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance        #
-# with the License. A copy of the License is located at                                                             #
-#                                                                                                                   #
-#     http://aws.amazon.com/asl/                                                                                    #
-#                                                                                                                   #
-# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
-# OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
-# and limitations under the License.                                                                                #
+######################################################################################################################
+#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#                                                                                                                    #
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
+#  with the License. A copy of the License is located at                                                             #
+#                                                                                                                    #
+#      http://www.apache.org/licenses/LICENSE-2.0                                                                    #
+#                                                                                                                    #
+#  or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
+#  and limitations under the License.                                                                                #
 ######################################################################################################################
 
 import boto3
@@ -19,8 +19,8 @@ import uuid
 import re
 import string
 import random
+import requests
 from urllib.request import Request, urlopen
-from botocore.vendored import requests
 from os import environ
 
 logging.getLogger().debug('Loading function')
@@ -156,7 +156,7 @@ def check_requirements(resource_properties):
     #------------------------------------------------------------------------------------------------------------------
     if (resource_properties['HttpFloodProtectionRateBasedRuleActivated'] == "yes" and
         int(resource_properties['RequestThreshold']) < 100):
-        raise Exception("The minimum rate-based rule rate limit per 5 minute period is 100. If need to use values bellow that, please select AWS Lambda or Amazon Athena log parser.")
+        raise Exception("The minimum rate-based rule rate limit per 5 minute period is 100. If need to use values below that, please select AWS Lambda or Amazon Athena log parser.")
 
     logging.getLogger().debug("[check_requirements] End")
 

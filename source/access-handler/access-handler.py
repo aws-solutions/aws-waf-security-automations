@@ -1,14 +1,14 @@
-#####################################################################################################################
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
-#                                                                                                                   #
-# Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance        #
-# with the License. A copy of the License is located at                                                             #
-#                                                                                                                   #
-#     http://aws.amazon.com/asl/                                                                                    #
-#                                                                                                                   #
-# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
-# OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
-# and limitations under the License.                                                                                #
+######################################################################################################################
+#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#                                                                                                                    #
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
+#  with the License. A copy of the License is located at                                                             #
+#                                                                                                                    #
+#      http://www.apache.org/licenses/LICENSE-2.0                                                                    #
+#                                                                                                                    #
+#  or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
+#  and limitations under the License.                                                                                #
 ######################################################################################################################
 
 import boto3
@@ -21,6 +21,7 @@ from urllib.request import Request, urlopen
 from os import environ
 from ipaddress import ip_address
 from botocore.config import Config
+from backoff import on_exception, expo
 
 logging.getLogger().debug('Loading function')
 
@@ -30,10 +31,16 @@ logging.getLogger().debug('Loading function')
 API_CALL_NUM_RETRIES = 5
 
 waf = None
+if environ['LOG_TYPE'] == 'alb':
+    session = boto3.session.Session(region_name=environ['REGION'])
+    waf = session.client('waf-regional', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+else:
+    waf = boto3.client('waf', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
 #======================================================================================================================
 # Auxiliary Functions
 #======================================================================================================================
+@on_exception(expo, waf.exceptions.WAFStaleDataException, max_time=10)
 def waf_update_ip_set(ip_set_id, source_ip):
     logging.getLogger().debug('[waf_update_ip_set] Start')
 
@@ -52,6 +59,7 @@ def waf_update_ip_set(ip_set_id, source_ip):
 
     logging.getLogger().debug('[waf_update_ip_set] End')
 
+@on_exception(expo, waf.exceptions.WAFStaleDataException, max_time=10)
 def waf_get_ip_set(ip_set_id):
     logging.getLogger().debug('[waf_get_ip_set] Start')
     response = waf.get_ip_set(IPSetId=ip_set_id)
@@ -211,13 +219,6 @@ def lambda_handler(event, context):
         #----------------------------------------------------------
         logging.getLogger().info(event)
         source_ip = event['headers']['X-Forwarded-For'].split(',')[0].strip()
-
-        global waf
-        if environ['LOG_TYPE'] == 'alb':
-            session = boto3.session.Session(region_name=environ['REGION'])
-            waf = session.client('waf-regional', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
-        else:
-            waf = boto3.client('waf', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
         waf_update_ip_set(environ['IP_SET_ID_BAD_BOT'], source_ip)
 

@@ -1,20 +1,25 @@
+# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# You may not use this file except in compliance with the License.
+# A copy of the License is located at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# or in the "license" file accompanying this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing
+# permissions and limitations under the License.
+
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-ALB) - AWS WAF Security Automations - ALB %%VERSION%%: This AWS CloudFormation template helps
+  (SO0006-ALB) - AWS WAF Security Automations - ALB %VERSION%: This AWS CloudFormation template helps
   you provision the AWS WAF Security Automations stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
   **WARNING** This template creates an AWS Lambda function, an AWS WAF Web ACL, an Amazon S3 bucket,
   and an Amazon CloudWatch custom metric. You will be billed for the AWS resources used if you
   create a stack from this template.
-
-  **NOTICE** Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved. Licensed under
-  the Amazon Software License (the License). You may not use this file except in compliance with the
-  License. A copy of the License is located at http://aws.amazon.com/asl/ or in the license file
-  accompanying this file. This file is distributed on an AS IS BASIS, WITHOUT WARRANTIES OR
-  CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing
-  permissions and limitations under the License.
-
 
 Parameters:
   ActivateSqlInjectionProtectionParam:
@@ -443,7 +448,7 @@ Resources:
               - Effect: Allow
                 Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
-                  - '*'
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:changetoken/*'
         - PolicyName: LogsAccess
           PolicyDocument:
             Statement:
@@ -453,7 +458,7 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*LogParser*'
         - PolicyName: CloudWatchAccess
           PolicyDocument:
             Statement:
@@ -461,6 +466,15 @@ Resources:
                 Action: 'cloudwatch:GetMetricStatistics'
                 Resource:
                   - '*'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
+              LogsAccess - permission restricted to account, region and log group name substring (LogParser);
+              CloudWatchAccess - this actions does not support resource-level permissions
 
   LambdaRoleReputationListsParser:
     Type: 'AWS::IAM::Role'
@@ -483,14 +497,14 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*ReputationListsParser*'
         - PolicyName: 'WAFGetChangeToken'
           PolicyDocument:
             Statement:
               - Effect: Allow
                 Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
-                  - '*'
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:changetoken/*'
         - PolicyName: WAFGetAndUpdateIPSet
           PolicyDocument:
             Statement:
@@ -514,6 +528,16 @@ Resources:
                 Action: 'cloudwatch:GetMetricStatistics'
                 Resource:
                   - '*'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              CloudWatchLogs - permission restricted to account, region and log group name substring (ReputationListsParser);
+              WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
+              CloudFormationAccess - account, region and stack name;
+              CloudWatchAccess - this actions does not support resource-level permissions
 
   LambdaRoleBadBot:
     Type: 'AWS::IAM::Role'
@@ -535,7 +559,7 @@ Resources:
               - Effect: Allow
                 Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
-                  - '*'
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:changetoken/*'
         - PolicyName: WAFGetAndUpdateIPSet
           PolicyDocument:
             Statement:
@@ -554,7 +578,7 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*BadBotParser*'
         - PolicyName: 'CloudFormationAccess'
           PolicyDocument:
             Statement:
@@ -569,6 +593,16 @@ Resources:
                 Action: 'cloudwatch:GetMetricStatistics'
                 Resource:
                   - '*'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
+              LogsAccess - permission restricted to account, region and log group name substring (BadBotParser);
+              CloudFormationAccess - account, region and stack name;
+              CloudWatchAccess - this actions does not support resource-level permissions
 
   LambdaRoleCustomResource:
     Type: 'AWS::IAM::Role'
@@ -583,7 +617,7 @@ Resources:
               - 'sts:AssumeRole'
       Path: /
       Policies:
-        - PolicyName: S3AccessGeneral
+        - PolicyName: S3AccessGeneralAppAccessLog
           PolicyDocument:
             Statement:
               - Effect: Allow
@@ -592,7 +626,20 @@ Resources:
                   - 's3:GetBucketNotification'
                   - 's3:PutBucketNotification'
                 Resource:
-                  - 'arn:aws:s3:::*'
+                  - !Sub 'arn:aws:s3:::${AppAccessLogBucket}'
+        - !If
+          - HttpFloodProtectionLogParserActivated
+          - PolicyName: S3AccessGeneralWafLog
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - 's3:CreateBucket'
+                    - 's3:GetBucketNotification'
+                    - 's3:PutBucketNotification'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}'
+          - !Ref 'AWS::NoValue'
         - PolicyName: S3Access
           PolicyDocument:
             Statement:
@@ -708,7 +755,7 @@ Resources:
               - Effect: Allow
                 Action: !Sub '${WafApiType}:GetChangeToken'
                 Resource:
-                  - '*'
+                  - !Sub '${WafArnPrefix}${AWS::AccountId}:changetoken/*'
         - PolicyName: LogsAccess
           PolicyDocument:
             Statement:
@@ -718,7 +765,17 @@ Resources:
                   - 'logs:CreateLogStream'
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*CustomResource*'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              WAFAccess, WAFRuleAccess, WAFIPSetAccess and WAFRateBasedRuleAccess - restricted to WafArnPrefix/AccountId;
+              CloudFormationAccess - account, region and stack name;
+              WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
+              LogsAccess - permission restricted to account, region and log group name substring (CustomResource);
 
 Outputs:
   WAFWhitelistSet:

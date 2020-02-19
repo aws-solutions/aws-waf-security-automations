@@ -1,14 +1,14 @@
-#####################################################################################################################
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
-#                                                                                                                   #
-# Licensed under the Amazon Software License (the "License"). You may not use this file except in compliance        #
-# with the License. A copy of the License is located at                                                             #
-#                                                                                                                   #
-#     http://aws.amazon.com/asl/                                                                                    #
-#                                                                                                                   #
-# or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
-# OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
-# and limitations under the License.                                                                                #
+######################################################################################################################
+#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#                                                                                                                    #
+#  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
+#  with the License. A copy of the License is located at                                                             #
+#                                                                                                                    #
+#      http://www.apache.org/licenses/LICENSE-2.0                                                                    #
+#                                                                                                                    #
+#  or in the "license" file accompanying this file. This file is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES #
+#  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
+#  and limitations under the License.                                                                                #
 ######################################################################################################################
 
 import boto3
@@ -18,10 +18,11 @@ import logging
 import math
 import time
 import datetime
+import requests
 from urllib.request import Request, urlopen
-from botocore.vendored import requests
 from os import environ
 from botocore.config import Config
+from backoff import on_exception, expo
 
 logging.getLogger().debug('Loading function')
 
@@ -33,6 +34,8 @@ LIST_LIMIT  = 50
 BATCH_DELETE_LIMIT = 500
 DELAY_BETWEEN_DELETES = 2
 RULE_SUFIX_RATE_BASED = "-HTTP Flood Rule"
+
+waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
 #======================================================================================================================
 # Configure Access Log Bucket
@@ -159,11 +162,11 @@ def remove_s3_bucket_lambda_event(bucket_name, lambda_function_arn):
 #======================================================================================================================
 # Configure Rate Based Rule
 #======================================================================================================================
+@on_exception(expo, waf_client.exceptions.WAFStaleDataException, max_time=10)
 def create_rate_based_rule(stack_name, request_threshold, metric_name_prefix):
     logging.getLogger().debug("[create_rate_based_rule] Start")
 
     rule_id = ""
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
     response = waf_client.create_rate_based_rule(
         Name = stack_name + RULE_SUFIX_RATE_BASED,
@@ -177,10 +180,9 @@ def create_rate_based_rule(stack_name, request_threshold, metric_name_prefix):
     logging.getLogger().debug("[create_rate_based_rule] End")
     return rule_id
 
+@on_exception(expo, waf_client.exceptions.WAFStaleDataException, max_time=10)
 def update_rate_based_rule(rule_id, request_threshold):
     logging.getLogger().debug("[update_rate_based_rule] Start")
-
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
 
     try:
         waf_client.update_rate_based_rule(
@@ -195,10 +197,10 @@ def update_rate_based_rule(rule_id, request_threshold):
 
     logging.getLogger().debug("[update_rate_based_rule] End")
 
+@on_exception(expo, waf_client.exceptions.WAFStaleDataException, max_time=10)
 def delete_rate_based_rule(rule_id):
     logging.getLogger().debug("[delete_rate_based_rule] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     try:
         waf_client.delete_rate_based_rule(
             RuleId=rule_id,
@@ -214,10 +216,10 @@ def delete_rate_based_rule(rule_id):
 #======================================================================================================================
 # Configure Web ACl
 #======================================================================================================================
+@on_exception(expo, waf_client.exceptions.WAFStaleDataException, max_time=10)
 def update_web_acl(web_acl_id, updates):
     logging.getLogger().debug("[update_web_acl] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     if len(updates) > 0:
         waf_client.update_web_acl(
             WebACLId = web_acl_id,
@@ -271,7 +273,6 @@ def configure_web_acl(resource_properties, old_resource_properties):
     # Get Current Rule List
     #------------------------------------------------------------------------------------------------------------------
     current_rules = {}
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     response = waf_client.get_web_acl(WebACLId=resource_properties['WAFWebACL'])
     for rule in response['WebACL']['Rules']:
         current_rules[rule['RuleId']] = {
@@ -334,7 +335,6 @@ def clean_web_acl(web_acl_id):
     # Get current rule list to be removed from the web ACL
     #------------------------------------------------------------------------------------------------------------------
     updates = []
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     response = waf_client.get_web_acl(WebACLId=web_acl_id)
     for rule in response['WebACL']['Rules']:
         updates.append({
@@ -354,10 +354,18 @@ def clean_web_acl(web_acl_id):
 
     logging.getLogger().debug("[clean_web_acl] End")
 
+@on_exception(expo, waf_client.exceptions.WAFStaleDataException, max_time=10)
+def waf_update_ip_set(ip_set_id, updates):
+    logging.getLogger().debug('[waf_update_ip_set] Start')
+    response = waf_client.update_ip_set(IPSetId=ip_set_id,
+        ChangeToken=waf_client.get_change_token()['ChangeToken'],
+        Updates=updates)
+    logging.getLogger().debug('[waf_update_ip_set] End')
+    return response
+
 def clean_ip_set(ip_set_id):
     logging.getLogger().debug("[clean_ip_set] Clean IP Set %s"%ip_set_id)
 
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     response = waf_client.get_ip_set(IPSetId=ip_set_id)
     while len(response['IPSet']['IPSetDescriptors']) > 0:
         counter = 0
@@ -375,11 +383,7 @@ def clean_ip_set(ip_set_id):
                 break
 
         logging.getLogger().debug("[clean_ip_set] Deleting %d IPs..."%len(updates))
-        waf_client.update_ip_set(
-            IPSetId=ip_set_id,
-            ChangeToken=waf_client.get_change_token()['ChangeToken'],
-            Updates=updates
-        )
+        waf_update_ip_set(ip_set_id, updates)
         response = waf_client.get_ip_set(IPSetId=ip_set_id)
         if len(response['IPSet']['IPSetDescriptors']) > 0:
             logging.getLogger().debug('[clean_ip_set] Sleep %d sec befone next slot to avoid AWS WAF API throttling ...'%DELAY_BETWEEN_DELETES)
@@ -392,7 +396,6 @@ def clean_ip_set(ip_set_id):
 def put_logging_configuration(web_acl_arn, delivery_stream_arn):
     logging.getLogger().debug("[put_logging_configuration] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     waf_client.put_logging_configuration(
         LoggingConfiguration = {
             'ResourceArn': web_acl_arn,
@@ -405,7 +408,6 @@ def put_logging_configuration(web_acl_arn, delivery_stream_arn):
 def delete_logging_configuration(web_acl_arn):
     logging.getLogger().debug("[delete_logging_configuration] Start")
 
-    waf_client = boto3.client(environ['API_TYPE'], config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
     waf_client.delete_logging_configuration(ResourceArn = web_acl_arn)
 
     logging.getLogger().debug("[delete_logging_configuration] End")
@@ -650,7 +652,7 @@ def lambda_handler(event, context):
         # Process event
         #----------------------------------------------------------
         if event['ResourceType'] == "Custom::ConfigureAppAccessLogBucket":
-            lambda_log_parser_function = event['ResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['ResourceProperties'] else None
+            lambda_log_parser_function = event['ResourceProperties']['LogParser'] if 'LogParser' in event['ResourceProperties'] else None
             lambda_parser = True if event['ResourceProperties']['ScannersProbesLambdaLogParser'] == 'yes' else False
             athena_parser = True if event['ResourceProperties']['ScannersProbesAthenaLogParser'] == 'yes' else False
 
@@ -662,7 +664,7 @@ def lambda_handler(event, context):
                     athena_parser)
 
             elif 'UPDATE' in request_type:
-                old_lambda_app_log_parser_function = event['OldResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['OldResourceProperties'] else None
+                old_lambda_app_log_parser_function = event['OldResourceProperties']['LogParser'] if 'LogParser' in event['OldResourceProperties'] else None
                 old_lambda_parser = True if event['OldResourceProperties']['ScannersProbesLambdaLogParser'] == 'yes' else False
                 old_athena_parser = True if event['OldResourceProperties']['ScannersProbesAthenaLogParser'] == 'yes' else False
 
@@ -683,7 +685,7 @@ def lambda_handler(event, context):
                     lambda_log_parser_function)
 
         elif event['ResourceType'] == "Custom::ConfigureWafLogBucket":
-            lambda_log_parser_function = event['ResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['ResourceProperties'] else None
+            lambda_log_parser_function = event['ResourceProperties']['LogParser'] if 'LogParser' in event['ResourceProperties'] else None
             lambda_parser = True if event['ResourceProperties']['HttpFloodLambdaLogParser'] == 'yes' else False
             athena_parser = True if event['ResourceProperties']['HttpFloodAthenaLogParser'] == 'yes' else False
 
@@ -694,7 +696,7 @@ def lambda_handler(event, context):
                     athena_parser)
 
             elif 'UPDATE' in request_type:
-                old_lambda_app_log_parser_function = event['OldResourceProperties']['LambdaLogParserFunction'] if 'LambdaLogParserFunction' in event['OldResourceProperties'] else None
+                old_lambda_app_log_parser_function = event['OldResourceProperties']['LogParser'] if 'LogParser' in event['OldResourceProperties'] else None
                 old_lambda_parser = True if event['OldResourceProperties']['HttpFloodLambdaLogParser'] == 'yes' else False
                 old_athena_parser = True if event['OldResourceProperties']['HttpFloodAthenaLogParser'] == 'yes' else False
 
@@ -752,7 +754,7 @@ def lambda_handler(event, context):
         elif event['ResourceType'] == "Custom::PopulateReputationList":
             if 'CREATE' in request_type or 'UPDATE' in request_type:
                 populate_reputation_list(event['ResourceProperties']['Region'],
-                    event['ResourceProperties']['LambdaWAFReputationListsParserFunction'],
+                    event['ResourceProperties']['ReputationListsParser'],
                     event['ResourceProperties']['WAFReputationListsSet'])
 
             # DELETE: do nothing
