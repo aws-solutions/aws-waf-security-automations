@@ -218,7 +218,7 @@ def lambda_handler(event, context):
         # Read inputs parameters
         #----------------------------------------------------------
         logging.getLogger().info(event)
-        source_ip = event['headers']['X-Forwarded-For'].split(',')[0].strip()
+        source_ip = event['requestContext']['identity']['sourceIp']
 
         waf_update_ip_set(environ['IP_SET_ID_BAD_BOT'], source_ip)
 
