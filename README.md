@@ -1,5 +1,10 @@
 # AWS WAF Security Automations
-A solution that contains all AWS WAF samples developed so far - waf-reactive-blacklist, waf-bad-bot-blocking, waf-block-bad-behaving and waf-reputation-lists.
+A solution that contains all AWS WAF samples developed so far:
+
+* waf-reactive-blacklist
+* waf-bad-bot-blocking
+* waf-block-bad-behaving
+* waf-reputation-lists
 
 For the full solution overview visit [AWS WAF Security Automations](https://aws.amazon.com/answers/security/aws-waf-security-automations/).
 
@@ -28,7 +33,7 @@ The following procedures assumes that all of the OS-level configuration has been
 The AWS WAF Security Automations solution is developed with Node.js and Python for the microservices that run in AWS Lambda. The latest version has been tested with Node.js v10.x and Python v3.8.
 
 #### 02. Clone AWS WAF Security Automations repository
-Clone the aws-waf-security-automations GitHub repository:
+Clone the `aws-waf-security-automations` GitHub repository:
 
 ```
 git clone https://github.com/awslabs/aws-waf-security-automations.git
@@ -38,9 +43,10 @@ git clone https://github.com/awslabs/aws-waf-security-automations.git
 ```
 export TEMPLATE_OUTPUT_BUCKET=<YOUR_TEMPLATE_OUTPUT_BUCKET>
 export DIST_OUTPUT_BUCKET=<YOUR_DIST_OUTPUT_BUCKET>
-export SOLUTION_NAME="workspaces-cost-optimizer"
+export SOLUTION_NAME="aws-waf-security-automations"
 export VERSION=<VERSION>
 export AWS_REGION=<AWS_REGION>
+```
 
 #### 04. Build the AWS WAF Security Automations solution for deployment:
 ```
@@ -56,8 +62,8 @@ aws s3 cp ./dist s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automatio
 ```
 
 #### 06. Deploy the AWS WAF Security Automations solution:
-* From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template.
-* Using AWS CloudFormation, launch the AWS WAF Security Automations solution stack using the copied Amazon S3 link for the aws-waf-security-automations.template.
+* From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the `aws-waf-security-automations.template`.
+* Using AWS CloudFormation, launch the AWS WAF Security Automations solution stack using the copied Amazon S3 link for the `aws-waf-security-automations.template`.
 
 ***
 
