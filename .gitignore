@@ -6,3 +6,5 @@
 **/package-lock.json
 **/.pyc
 /deployment/open-source/
+**/functions
+**/templates
