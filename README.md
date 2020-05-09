@@ -49,12 +49,13 @@ export AWS_REGION=<AWS_REGION>
 ```
 chmod +x ./build-s3-dist.sh && ./build-s3-dist.sh $TEMPLATE_OUTPUT_BUCKET $DIST_OUTPUT_BUCKET $SOLUTION_NAME $VERSION
 ```
-#### 05. Upload deployment assets to your Amazon S3 bucket:
+#### 05. Upload deployment assets to your Amazon S3 buckets:
 
-Note that you must manually create a bucket in S3 called `$DIST_OUTPUT_BUCKET-$AWS_REGION` to copy the distribution. The build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
+Note that you must manually create two buckets in S3 called `$TEMPLATE_OUTPUT_BUCKET ` and `$DIST_OUTPUT_BUCKET-$AWS_REGION` to copy the distribution. The build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
 
 ```
-aws s3 cp ./dist s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/latest --recursive --acl bucket-owner-full-control
+aws s3 cp ./deployment/global-s3-assets s3://$TEMPLATE_OUTPUT_BUCKET/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
+aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/$VERSION/ --recursive --acl bucket-owner-full-control
 ```
 
 #### 06. Deploy the AWS WAF Security Automations solution:
