@@ -14,7 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed README file to accurately reflect script params
 - Upgraded from Python 3.7 to 3.8
 - Changed RequestThreshold min limit from 2000 to 100
-## [2.3.3] - 2020-05-15
+## [2.3.3] - 2020-06-15
 ### Added
 - Implemented Athena optimization: added partitioning for CloudFront, ALB and WAF logs and Athena queries
 ### Changed
