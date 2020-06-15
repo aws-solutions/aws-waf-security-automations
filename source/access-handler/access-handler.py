@@ -1,5 +1,5 @@
 ######################################################################################################################
-#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
 #                                                                                                                    #
 #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
 #  with the License. A copy of the License is located at                                                             #
@@ -218,7 +218,8 @@ def lambda_handler(event, context):
         # Read inputs parameters
         #----------------------------------------------------------
         logging.getLogger().info(event)
-        source_ip = event['headers']['X-Forwarded-For'].split(',')[0].strip()
+        # fix security exposure based on user supplied IP addresses
+        source_ip = event['requestContext']['identity']['sourceIp']
 
         waf_update_ip_set(environ['IP_SET_ID_BAD_BOT'], source_ip)
 

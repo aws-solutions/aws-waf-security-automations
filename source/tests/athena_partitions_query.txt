@@ -1,0 +1,7 @@
+ALTER TABLE testdb.testtable
+ADD IF NOT EXISTS
+PARTITION (
+	year = 2020,
+	month = 05,
+	day = 08,
+	hour = 02);

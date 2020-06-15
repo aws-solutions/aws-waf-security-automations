@@ -1,4 +1,4 @@
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 # You may not use this file except in compliance with the License.
@@ -46,6 +46,7 @@ Metadata:
           - RequestThreshold
           - ErrorThreshold
           - WAFBlockPeriod
+          - KeepDataInOriginalS3Location
 
     ParameterLabels:
       ActivateSqlInjectionProtectionParam:
@@ -80,7 +81,9 @@ Metadata:
 
       WAFBlockPeriod:
         default: WAF Block Period
-
+      
+      KeepDataInOriginalS3Location:
+        default: Keep Data in Original s3 location
 
 Parameters:
   ActivateSqlInjectionProtectionParam:
@@ -171,8 +174,8 @@ Parameters:
     MinValue: 0
     Description:  >-
       If you chose yes for the Activate Scanners & Probes Protection parameter, enter the maximum
-      acceptable bad requests per minute per IP. If you chose to deactivate this protection
-      protection, ignore this parameter.
+      acceptable bad requests per minute per IP. If you chose to deactivate this protection, 
+      ignore this parameter.
 
   WAFBlockPeriod:
     Type: Number
@@ -182,6 +185,20 @@ Parameters:
       If you chose yes for the Activate Scanners & Probes Protection or HTTP Flood Lambda/Athena log
       parser parameters, enter the period (in minutes) to block applicable IP addresses. If you
       chose to deactivate log parsing, ignore this parameter.
+
+  KeepDataInOriginalS3Location:
+    Type: String
+    Default: 'No'
+    AllowedValues:
+      - 'Yes'
+      - 'No'
+    Description: >-
+      If you chose Amazon Athena log parser for the Activate Scanners & Probes Protection parameter, 
+      partitioning will be applied to log files and Athena queries. By default log files will be moved
+      from their original location to a partitioned folder structure in s3. Choose Yes if you also want
+      to keep a copy of the logs in their original location. Selecting "Yes" will duplicate your log
+      storage. If you did not choose to activate Athena log parsing, ignore this parameter.
+
 
 Conditions:
   SqlInjectionProtectionActivated: !Equals
@@ -248,6 +265,7 @@ Conditions:
     - !Ref EndpointType
     - 'CloudFront'
 
+
 Mappings:
     SourceCode:
         General:
@@ -268,6 +286,8 @@ Mappings:
             WAFScannersProbesRule: 'BLOCK'
             WAFIPReputationListsRule: 'BLOCK'
             WAFBadBotRule: 'BLOCK'
+        Athena:
+            QueryScheduledRunTime: 5   # by default athena query runs every 5 minutes, update it if needed
 
 Resources:
   LambdaRoleHelper:
@@ -471,6 +491,12 @@ Resources:
   LogParser:
     Type: 'AWS::Lambda::Function'
     Condition: LogParser
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W58
+            reason: "Log permissions are defined in the LambdaRoleLogParser policies"
     Properties:
       Description: !Sub >
             This function parses access logs to identify suspicious behavior, such as an abnormal amount of errors.
@@ -496,6 +522,62 @@ Resources:
           STACK_NAME: !Ref 'AWS::StackName'
           IP_SET_ID_HTTP_FLOOD: !If [HttpFloodProtectionLogParserActivated, !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFHttpFloodSet, !GetAtt CloudFrontStack.Outputs.WAFHttpFloodSet], !Ref 'AWS::NoValue']
           IP_SET_ID_SCANNERS_PROBES: !If [ScannersProbesProtectionActivated, !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFScannersProbesSet, !GetAtt CloudFrontStack.Outputs.WAFScannersProbesSet], !Ref 'AWS::NoValue']
+          WAF_BLOCK_PERIOD: !Ref WAFBlockPeriod
+          ERROR_THRESHOLD: !Ref ErrorThreshold
+          REQUEST_THRESHOLD: !Ref RequestThreshold
+      Runtime: python3.8
+      MemorySize: 512
+      Timeout: 300
+
+  MoveS3LogsForPartition:
+    Type: 'AWS::Lambda::Function'
+    Condition: ScannersProbesAthenaLogParser
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W58
+            reason: "Log permissions are defined in the LambdaRolePartitionS3Logs policies"
+    Properties:
+      Description: >-
+            This function is triggered by S3 event to move log files(upon their arrival in s3) from their original location
+            to a partitioned folder structure created per timestamps in file names, hence allowing the usage of partitioning
+            within AWS Athena.
+      Handler: 'partition_s3_logs.lambda_handler'
+      Role: !If [AlbEndpoint, !GetAtt AlbStack.Outputs.LambdaRolePartitionS3LogsArn, !GetAtt CloudFrontStack.Outputs.LambdaRolePartitionS3LogsArn]
+      Code:
+        S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
+        S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'log-parser.zip']]
+      Environment:
+        Variables:
+          LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
+          KEEP_ORIGINAL_DATA: !Ref KeepDataInOriginalS3Location
+          ENDPOINT: !Ref EndpointType
+      Runtime: python3.8
+      MemorySize: 512
+      Timeout: 300
+
+  AddAthenaPartitions:
+    Type: 'AWS::Lambda::Function'
+    Condition: AthenaLogParser
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W58
+            reason: "Log permissions are defined in the LambdaRoleAddAthenaPartitions policies"
+    Properties:
+      Description: >-
+            This function adds a new hourly partition to athena table.
+            It runs every hour, triggered by a CloudWatch event.
+      Handler: 'add_athena_partitions.lambda_handler'
+      Role: !If [AlbEndpoint, !GetAtt AlbStack.Outputs.LambdaRoleAddAthenaPartitionsArn, !GetAtt CloudFrontStack.Outputs.LambdaRoleAddAthenaPartitionsArn]
+      Code:
+        S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
+        S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'log-parser.zip']]
+      Environment:
+        Variables:
+          LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
       Runtime: python3.8
       MemorySize: 512
       Timeout: 300
@@ -509,12 +591,30 @@ Resources:
       Principal: s3.amazonaws.com
       SourceAccount: !Ref 'AWS::AccountId'
 
+  LambdaInvokePermissionMoveS3LogsForPartition:
+    Type: 'AWS::Lambda::Permission'
+    Condition: ScannersProbesAthenaLogParser
+    Properties:
+      FunctionName: !GetAtt MoveS3LogsForPartition.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref 'AWS::AccountId'
+
+  LambdaPermissionAddAthenaPartitions:
+    Type: AWS::Lambda::Permission
+    Condition: AthenaLogParser
+    Properties:
+      FunctionName: !GetAtt AddAthenaPartitions.Arn
+      Action: "lambda:InvokeFunction"
+      Principal: "events.amazonaws.com"
+      SourceArn: !GetAtt LambdaAddAthenaPartitionsEventsRule.Arn
+
   LambdaAthenaWAFLogParser:
     Type: 'AWS::Events::Rule'
     Condition: HttpFloodAthenaLogParser
     Properties:
       Description: Security Automations - WAF Logs Athena parser
-      ScheduleExpression: rate(5 minutes)
+      ScheduleExpression: !Join ['', ['rate(', !FindInMap ["Solution", "Athena", "QueryScheduledRunTime"], ' minutes)']]
       Targets:
         - Arn: !GetAtt LogParser.Arn
           Id: LogParser
@@ -523,7 +623,8 @@ Resources:
               "resourceType": "LambdaAthenaWAFLogParser",
               "glueAccessLogsDatabase": "${FirehoseAthenaStack.Outputs.GlueAccessLogsDatabase}",
               "accessLogBucket": "${WafLogBucket}",
-              "logParserQuery": "${FirehoseAthenaStack.Outputs.AthenaWafLogParserQuery}"
+              "glueWafAccessLogsTable": "${FirehoseAthenaStack.Outputs.GlueWafAccessLogsTable}",
+              "athenaWorkGroup":"${FirehoseAthenaStack.Outputs.WAFLogAthenaQueryWorkGroup}"
             }
 
   LambdaInvokePermissionWafLogParserCloudWatch:
@@ -540,7 +641,7 @@ Resources:
     Condition: ScannersProbesAthenaLogParser
     Properties:
       Description: Security Automations - App Logs Athena parser
-      ScheduleExpression: rate(5 minutes)
+      ScheduleExpression: !Join ['', ['rate(', !FindInMap ["Solution", "Athena", "QueryScheduledRunTime"], ' minutes)']]
       Targets:
         - Arn: !GetAtt LogParser.Arn
           Id: LogParser
@@ -549,8 +650,38 @@ Resources:
               "resourceType": "LambdaAthenaAppLogParser",
               "glueAccessLogsDatabase": "${FirehoseAthenaStack.Outputs.GlueAccessLogsDatabase}",
               "accessLogBucket": "${AppAccessLogBucket}",
-              "logParserQuery": "${FirehoseAthenaStack.Outputs.AthenaAppLogParserQuery}"
+              "glueAppAccessLogsTable": "${FirehoseAthenaStack.Outputs.GlueAppAccessLogsTable}",
+              "athenaWorkGroup": "${FirehoseAthenaStack.Outputs.WAFAppAccessLogAthenaQueryWorkGroup}"
             }
+
+  LambdaAddAthenaPartitionsEventsRule:
+    Type: 'AWS::Events::Rule'
+    Condition: AthenaLogParser
+    Properties:
+      Description: Security Automations - Add partitions to Athena table
+      ScheduleExpression: rate(1 hour)
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt AddAthenaPartitions.Arn
+          Id: LambdaAddAthenaPartitions
+          Input: !Sub 
+            - >-
+              {
+                "resourceType": "LambdaAddAthenaPartitionsEventsRule",
+                "glueAccessLogsDatabase": "${GlueAccessLogsDatabase}",
+                "accessLogBucket": "${AppAccessLogBucket}",
+                "glueAppAccessLogsTable": "${GlueAppAccessLogsTable}",
+                "glueWafAccessLogsTable": "${GlueWafAccessLogsTable}",
+                "wafLogBucket": "${WafLogBucket}",
+                "athenaWorkGroup": "${AthenaWorkGroup}"
+              }
+            -
+              GlueAccessLogsDatabase: !GetAtt FirehoseAthenaStack.Outputs.GlueAccessLogsDatabase
+              AppAccessLogBucket: !If [ScannersProbesAthenaLogParser, !Ref AppAccessLogBucket, '']
+              GlueAppAccessLogsTable: !If [ScannersProbesAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueAppAccessLogsTable, '']
+              GlueWafAccessLogsTable: !If [HttpFloodAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueWafAccessLogsTable, '']
+              WafLogBucket: !If [HttpFloodAthenaLogParser, !Ref WafLogBucket, '']
+              AthenaWorkGroup: !GetAtt FirehoseAthenaStack.Outputs.WAFAddPartitionAthenaQueryWorkGroup
 
   LambdaInvokePermissionAppLogParserCloudWatch:
     Type: 'AWS::Lambda::Permission'
@@ -564,6 +695,12 @@ Resources:
   ReputationListsParser:
     Type: 'AWS::Lambda::Function'
     Condition: ReputationListsProtectionActivated
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W58
+            reason: "Log permissions are defined in the LambdaRoleReputationListsParser policies"
     Properties:
       Description: >-
         This lambda function checks third-party IP reputation lists hourly for new IP ranges to
@@ -622,6 +759,12 @@ Resources:
   BadBotParser:
     Type: 'AWS::Lambda::Function'
     Condition: BadBotProtectionActivated
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W58
+            reason: "Log permissions are defined in the LambdaRoleBadBot policies"
     Properties:
       Description: >-
         This lambda function will intercepts and inspects trap endpoint requests to extract its IP
@@ -685,6 +828,12 @@ Resources:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BadBotParser.Arn}/invocations"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W59
+            reason: "Creating a honeypot to lure badbots away."
 
   ApiGatewayBadBotMethod:
     Type: 'AWS::ApiGateway::Method'
@@ -701,6 +850,12 @@ Resources:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
         Uri: !Sub "arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${BadBotParser.Arn}/invocations"
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W59
+            reason: "Creating a honeypot to lure badbots away."
 
   ApiGatewayBadBotDeployment:
     Type: 'AWS::ApiGateway::Deployment'
@@ -716,6 +871,9 @@ Resources:
           -
             id: W45
             reason: "Log not needed for this component."
+          -
+            id: W68
+            reason: "Usage Plan not required."
 
   ApiGatewayBadBotStage:
     Type: 'AWS::ApiGateway::Stage'
@@ -725,9 +883,68 @@ Resources:
       Description: Production Stage
       RestApiId: !Ref ApiGatewayBadBot
       StageName: ProdStage
+      AccessLogSetting:
+        DestinationArn: !GetAtt ApiGatewayBadBotStageAccessLogGroup.Arn
+        Format: >-
+          {"sourceIp": "$context.identity.sourceIp", "caller": "$context.identity.caller", "user": "$context.identity.user",
+          "requestTime": "$context.requestTime", "httpMethod": "$context.httpMethod", "resourcePath": "$context.resourcePath",
+          "protocol": "$context.protocol", "status": "$context.status", "responseLength": "$context.responseLength",
+          "requestId": "$context.requestId"}
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W64
+            reason: "Usage Plan not required."
+
+  ApiGatewayBadBotStageAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Condition: BadBotProtectionActivated
+
+  ApiGatewayBadBotCloudWatchRole:
+    Type: AWS::IAM::Role
+    Condition: BadBotProtectionActivated
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Action: sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service: apigateway.amazonaws.com
+      Policies:
+      -  PolicyName: LambdaRestApiCloudWatchRole
+         PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:DescribeLogGroups
+              - logs:DescribeLogStreams
+              - logs:PutLogEvents
+              - logs:GetLogEvents
+              - logs:FilterLogEvents
+              Effect: Allow
+              Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*'
+    
+  ApiGatewayBadBotAccount:
+      Type: AWS::ApiGateway::Account
+      Condition: BadBotProtectionActivated
+      Properties:
+        CloudWatchRoleArn: !GetAtt ApiGatewayBadBotCloudWatchRole.Arn
+      DependsOn:
+        - ApiGatewayBadBot
 
   CustomResource:
     Type: 'AWS::Lambda::Function'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W58
+            reason: "Log permissions are defined in the LambdaRoleCustomResource policies"
     Properties:
       Description: >-
         This lambda function configures the Web ACL rules based on the features enabled in the
@@ -763,6 +980,7 @@ Resources:
       LogParser: !If [LogParser, !GetAtt LogParser.Arn, !Ref 'AWS::NoValue']
       ScannersProbesLambdaLogParser: !If [ScannersProbesLambdaLogParser, 'yes', 'no']
       ScannersProbesAthenaLogParser: !If [ScannersProbesAthenaLogParser, 'yes', 'no']
+      MoveS3LogsForPartition: !If [ScannersProbesAthenaLogParser, !GetAtt MoveS3LogsForPartition.Arn, !Ref 'AWS::NoValue']
 
   ConfigureWafLogBucket:
     Type: 'Custom::ConfigureWafLogBucket'
@@ -871,6 +1089,20 @@ Resources:
       ReputationListsParser: !GetAtt ReputationListsParser.Arn
       WAFReputationListsSet: !If [AlbEndpoint, !GetAtt AlbStack.Outputs.WAFReputationListsSet, !GetAtt CloudFrontStack.Outputs.WAFReputationListsSet]
 
+  CustomAddAthenaPartitions:
+    Type: 'Custom::AddAthenaPartitions'
+    Condition: AthenaLogParser
+    Properties:
+      ServiceToken: !GetAtt CustomResource.Arn
+      AddAthenaPartitionsLambda: !GetAtt AddAthenaPartitions.Arn
+      ResourceType: 'CustomResource'
+      GlueAccessLogsDatabase: !GetAtt FirehoseAthenaStack.Outputs.GlueAccessLogsDatabase
+      AppAccessLogBucket: !If [ScannersProbesAthenaLogParser, !Ref AppAccessLogBucket, '']
+      GlueAppAccessLogsTable: !If [ScannersProbesAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueAppAccessLogsTable, '']
+      GlueWafAccessLogsTable: !If [HttpFloodAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueWafAccessLogsTable, '']
+      WafLogBucket: !If [HttpFloodAthenaLogParser, !Ref WafLogBucket, '']
+      AthenaWorkGroup: !GetAtt FirehoseAthenaStack.Outputs.WAFAddPartitionAthenaQueryWorkGroup
+
   MonitoringDashboard:
     Type: AWS::CloudWatch::Dashboard
     DependsOn: CheckRequirements
@@ -920,3 +1152,7 @@ Outputs:
   AppAccessLogBucket:
     Value: !Ref AppAccessLogBucket
     Condition: ScannersProbesProtectionActivated
+
+  SolutionVersion:
+    Description: Solution Version Number
+    Value: "%VERSION%"

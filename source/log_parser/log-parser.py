@@ -1,5 +1,5 @@
 ######################################################################################################################
-#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
 #                                                                                                                    #
 #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
 #  with the License. A copy of the License is located at                                                             #
@@ -25,6 +25,8 @@ from urllib.parse import unquote_plus
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 from backoff import on_exception, expo
+from build_athena_queries import build_athena_query_for_app_access_logs, \
+    build_athena_query_for_waf_logs
 
 logging.getLogger().debug('Loading function')
 
@@ -346,17 +348,64 @@ def send_anonymous_usage_data():
 def process_athena_scheduler_event(event):
     logging.getLogger().debug('[process_athena_scheduler_event] Start')
 
-    athena_client = boto3.client('athena')
-    response = athena_client.get_named_query(NamedQueryId=event['logParserQuery'])
+    log_type = str(environ['LOG_TYPE'].upper())
+    
+    # Execute athena query for CloudFront or ALB logs
+    if event['resourceType'] == 'LambdaAthenaAppLogParser' \
+       and (log_type == 'CLOUDFRONT' or log_type == 'ALB'):
+        execute_athena_query(log_type, event)
 
-    s3_ouput = "s3://%s/athena_results/"%event['accessLogBucket']
-    response = athena_client.start_query_execution(
-        QueryString = response['NamedQuery']['QueryString'],
-        QueryExecutionContext = {'Database': event['glueAccessLogsDatabase']},
-        ResultConfiguration = {'OutputLocation': s3_ouput}
-    )
-
+    # Execute athena query for WAF logs
+    if event['resourceType'] == 'LambdaAthenaWAFLogParser':
+        execute_athena_query('WAF', event)
+    
     logging.getLogger().debug('[process_athena_scheduler_event] End')
+    
+    
+def execute_athena_query(log_type, event):            
+    logging.getLogger().debug('[execute_athena_query] Start')
+    
+    athena_client = boto3.client('athena')
+    s3_output = "s3://%s/athena_results/"%event['accessLogBucket']
+    database_name = event['glueAccessLogsDatabase']
+    
+    # Dynamically build query string using partition
+    # for CloudFront or ALB logs
+    if log_type == 'CLOUDFRONT' or log_type == 'ALB':
+        query_string = build_athena_query_for_app_access_logs(
+            logging.getLogger(),
+            log_type,
+            event['glueAccessLogsDatabase'],
+            event['glueAppAccessLogsTable'],
+            datetime.datetime.utcnow(),
+            int(environ['WAF_BLOCK_PERIOD']),
+            int(environ['ERROR_THRESHOLD'])
+        )
+    else: # Dynamically build query string using partition for WAF logs 
+        query_string = build_athena_query_for_waf_logs(
+            logging.getLogger(),
+            event['glueAccessLogsDatabase'],
+            event['glueWafAccessLogsTable'],
+            datetime.datetime.utcnow(),
+            int(environ['WAF_BLOCK_PERIOD']),
+            int(environ['REQUEST_THRESHOLD'])
+        )
+
+    response = athena_client.start_query_execution(
+            QueryString=query_string,
+            QueryExecutionContext={'Database': database_name},
+            ResultConfiguration={
+                'OutputLocation': s3_output,
+                'EncryptionConfiguration': {
+                    'EncryptionOption': 'SSE_S3'
+                }
+            },
+            WorkGroup=event['athenaWorkGroup']
+    )
+    
+    logging.getLogger().info("[execute_athena_query] Query Execution Response: {}".format(response))
+    logging.getLogger().info('[execute_athena_query] End')
+
 
 def process_athena_result(bucket_name, key_name, ip_set_id):
     logging.getLogger().debug('[process_athena_result] Start')

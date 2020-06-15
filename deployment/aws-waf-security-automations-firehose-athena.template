@@ -1,4 +1,4 @@
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 # You may not use this file except in compliance with the License.
@@ -84,6 +84,7 @@ Conditions:
     - Condition: HttpFloodAthenaLogParser
     - Condition: ScannersProbesAthenaLogParser
 
+
 Resources:
   # Ref: https://amzn.to/2GX48Pr
   FirehoseWAFLogsDeliveryStreamRole:
@@ -139,7 +140,6 @@ Resources:
               id: W11
               reason: "S3Access restricted to WafLogBucket and CloudWatchAccess to DeliveryStreamName."
 
-
   FirehoseWAFLogsDeliveryStream:
     Type: AWS::KinesisFirehose::DeliveryStream
     Condition: HttpFloodProtectionLogParserActivated
@@ -152,7 +152,8 @@ Resources:
           IntervalInSeconds: 300
           SizeInMBs: 5
         CompressionFormat: GZIP
-        Prefix: 'AWSLogs/'
+        Prefix: 'AWSLogs/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/'
+        ErrorOutputPrefix: 'AWSErrorLogs/result=!{firehose:error-output-type}/year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/hour=!{timestamp:HH}/'
         RoleARN: !GetAtt FirehoseWAFLogsDeliveryStreamRole.Arn
 
   GlueAccessLogsDatabase:
@@ -173,6 +174,15 @@ Resources:
       TableInput:
         Name: waf_access_logs
         Parameters: {"EXTERNAL": "TRUE"}
+        PartitionKeys:
+          - Name: year
+            Type: int
+          - Name: month
+            Type: int
+          - Name: day
+            Type: int
+          - Name: hour
+            Type: int
         StorageDescriptor:
           Location:
             Fn::Sub: "s3://${WafLogBucket}/AWSLogs/"
@@ -211,37 +221,6 @@ Resources:
             - Name: httprequest
               Type: struct<clientip:string,country:string,headers:array<struct<name:string,value:string>>,uri:string,args:string,httpversion:string,httpmethod:string,requestid:string>
 
-  AthenaWafLogParserQuery:
-    Type: AWS::Athena::NamedQuery
-    Condition: HttpFloodAthenaLogParser
-    Properties:
-      Database: !Ref GlueAccessLogsDatabase
-      Description: !Sub "HTTP Flood Log Parser. Request threshold: ${RequestThreshold}."
-      Name: "HTTPFloodLogParser"
-      QueryString: !Sub >
-        SELECT
-          client_ip,
-          MAX_BY(counter, counter) as max_counter_per_min
-        FROM (
-          SELECT
-            httprequest.clientip as client_ip,
-            COUNT(*) as counter
-          FROM
-            "${GlueAccessLogsDatabase}"."${GlueWafAccessLogsTable}"
-          WHERE
-            from_unixtime(timestamp/1000) > DATE_ADD('minute', -${WAFBlockPeriod}, NOW())
-          GROUP BY
-            httprequest.clientip,
-            date_trunc('minute', from_unixtime(timestamp/1000))
-          HAVING
-            COUNT(*) >= ${RequestThreshold}/5
-        )
-        GROUP BY
-          client_ip
-        ORDER BY
-          max_counter_per_min DESC
-        LIMIT 10000;
-
   ALBGlueAppAccessLogsTable:
     Type: AWS::Glue::Table
     Condition: ALBScannersProbesAthenaLogParser
@@ -252,9 +231,19 @@ Resources:
         Name: app_access_logs
         Description: !Sub '${ParentStackName} - APP Access Logs'
         Parameters: {"EXTERNAL": "TRUE"}
+        TableType: EXTERNAL_TABLE
+        PartitionKeys:
+            - Name: year
+              Type: int
+            - Name: month
+              Type: int
+            - Name: day
+              Type: int
+            - Name: hour
+              Type: int
         StorageDescriptor:
           Location: !Sub
-            - "s3://${AppAccessLogBucket}/AWSLogs/"
+            - "s3://${AppAccessLogBucket}/AWSLogs-Partitioned/"
             - {"AppAccessLogBucket" : !Ref AppAccessLogBucket}
           InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
           OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
@@ -338,9 +327,19 @@ Resources:
         Name: app_access_logs
         Description: !Sub '${ParentStackName} - APP Access Logs'
         Parameters: {"skip.header.line.count": "2", "EXTERNAL": "TRUE"}
+        TableType: EXTERNAL_TABLE
+        PartitionKeys:
+            - Name: year
+              Type: int
+            - Name: month
+              Type: int
+            - Name: day
+              Type: int
+            - Name: hour
+              Type: int
         StorageDescriptor:
           Location: !Sub
-            - "s3://${AppAccessLogBucket}/AWSLogs/"
+            - "s3://${AppAccessLogBucket}/AWSLogs-Partitioned/"
             - {"AppAccessLogBucket" : !Ref AppAccessLogBucket}
           InputFormat: "org.apache.hadoop.mapred.TextInputFormat"
           OutputFormat: "org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat"
@@ -348,7 +347,7 @@ Resources:
             Parameters: {"field.delim": "\t", "serialization.format": "\t"}
             SerializationLibrary: "org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe"
           Compressed : true
-          StoredAsSubDirectories: false
+          StoredAsSubDirectories: true
           Columns:
             - Name: date
               Type: date
@@ -403,70 +402,38 @@ Resources:
             - Name: encryptedfields
               Type: int
 
-  AthenaAppLogParserQuery:
-    Type: AWS::Athena::NamedQuery
-    Condition: ScannersProbesAthenaLogParser
-    Properties:
-      Database: !Ref GlueAccessLogsDatabase
-      Description: !Sub "Scanners Probes ${EndpointType} Log Parser. Error threshold: ${ErrorThreshold}."
-      Name: "ScannersProbesLogParser"
-      QueryString: !If
-        - AlbEndpoint
-        - !Sub > #IF ALB Stack
-          SELECT
-            client_ip,
-            MAX_BY(counter, counter) as max_counter_per_min
-          FROM (
-            SELECT
-              client_ip,
-              COUNT(*) as counter
-            FROM
-              "${GlueAccessLogsDatabase}"."${ALBGlueAppAccessLogsTable}"
-            WHERE
-              parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSS''Z') > DATE_ADD('minute', -${WAFBlockPeriod}, NOW()) AND
-              target_status_code = ANY (VALUES '400', '401', '403', '404', '405')
-            GROUP BY
-              client_ip,
-              date_trunc('minute', parse_datetime(time, 'yyyy-MM-dd''T''HH:mm:ss.SSSSSS''Z'))
-            HAVING
-              COUNT(*) >= ${ErrorThreshold}
-          )
-          GROUP BY
-              client_ip
-          ORDER BY
-              max_counter_per_min DESC
-          LIMIT 10000;
-        - !Sub > #IF CloudFront Stack
-          SELECT
-            client_ip,
-            MAX_BY(counter, counter) as max_counter_per_min
-          FROM (
-            WITH cf_logs_with_concat_data AS (
-              SELECT
-                *,
-                parse_datetime( concat( concat( format_datetime(date, 'yyyy-MM-dd'), '-' ), time ), 'yyyy-MM-dd-HH:mm:ss') AS datetime
-              FROM
-                "${GlueAccessLogsDatabase}"."${CloudFrontGlueAppAccessLogsTable}"
-            )
-            SELECT
-              requestip as client_ip,
-              COUNT(*) as counter
-            FROM
-              cf_logs_with_concat_data
-            WHERE
-              datetime > DATE_ADD('minute', -${WAFBlockPeriod}, NOW())
-              AND status = ANY (VALUES 400, 401, 403, 404, 405)
-            GROUP BY
-                requestip,
-                date_trunc('minute', datetime)
-            HAVING
-                COUNT(*) >= ${ErrorThreshold}
-          )
-          GROUP BY
-              client_ip
-          ORDER BY
-              max_counter_per_min DESC
-          LIMIT 10000;
+  WAFAddPartitionAthenaQueryWorkGroup:
+      Type: AWS::Athena::WorkGroup
+      Condition: AthenaLogParser
+      Properties:
+        Name: WAFAddPartitionAthenaQueryWorkGroup
+        Description: Athena WorkGroup for adding Athena partition queries used by AWS WAF Security Automations Solution
+        State: ENABLED
+        RecursiveDeleteOption: true
+        WorkGroupConfiguration:
+          PublishCloudWatchMetricsEnabled: true
+
+  WAFLogAthenaQueryWorkGroup:
+      Type: AWS::Athena::WorkGroup
+      Condition: HttpFloodAthenaLogParser
+      Properties:
+        Name: WAFLogAthenaQueryWorkGroup
+        Description: Athena WorkGroup for WAF log queries used by AWS WAF Security Automations Solution
+        State: ENABLED
+        RecursiveDeleteOption: true
+        WorkGroupConfiguration:
+          PublishCloudWatchMetricsEnabled: true
+
+  WAFAppAccessLogAthenaQueryWorkGroup:
+      Type: AWS::Athena::WorkGroup
+      Condition: ScannersProbesAthenaLogParser
+      Properties:
+        Name: WAFAppAccessLogAthenaQueryWorkGroup
+        Description: Athena WorkGroup for CloudFront or ALB application access log queries used by AWS WAF Security Automations Solution
+        State: ENABLED
+        RecursiveDeleteOption: true
+        WorkGroupConfiguration:
+          PublishCloudWatchMetricsEnabled: true
 
 Outputs:
   FirehoseWAFLogsDeliveryStreamArn:
@@ -481,10 +448,6 @@ Outputs:
     Value: !Ref GlueWafAccessLogsTable
     Condition: HttpFloodAthenaLogParser
 
-  AthenaWafLogParserQuery:
-    Value: !Ref AthenaWafLogParserQuery
-    Condition: HttpFloodAthenaLogParser
-
   ALBGlueAppAccessLogsTable:
     Value: !Ref ALBGlueAppAccessLogsTable
     Condition: ALBScannersProbesAthenaLogParser
@@ -493,6 +456,22 @@ Outputs:
     Value: !Ref CloudFrontGlueAppAccessLogsTable
     Condition: CloudFrontScannersProbesAthenaLogParser
 
-  AthenaAppLogParserQuery:
-    Value: !Ref AthenaAppLogParserQuery
+  GlueAppAccessLogsTable:
+    Description: Glue table for application access logs
+    Value: !If [CloudFrontEndpoint, !Ref CloudFrontGlueAppAccessLogsTable, !Ref ALBGlueAppAccessLogsTable]
+    Condition: ScannersProbesAthenaLogParser
+
+  WAFAddPartitionAthenaQueryWorkGroup:
+    Description: Athena WorkGroup for adding Athena partition queries used by AWS WAF Security Automations Solution
+    Value: !Ref WAFAddPartitionAthenaQueryWorkGroup
+    Condition: AthenaLogParser
+
+  WAFLogAthenaQueryWorkGroup:
+    Description: Athena WorkGroup for WAF log queries used by AWS WAF Security Automations Solution
+    Value: !Ref WAFLogAthenaQueryWorkGroup
+    Condition: HttpFloodAthenaLogParser
+
+  WAFAppAccessLogAthenaQueryWorkGroup:
+    Description: Athena WorkGroup for CloudFront or ALB application access log queries used by AWS WAF Security Automations Solution
+    Value: !Ref WAFAppAccessLogAthenaQueryWorkGroup
     Condition: ScannersProbesAthenaLogParser

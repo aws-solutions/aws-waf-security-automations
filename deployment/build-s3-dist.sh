@@ -79,12 +79,12 @@ done
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Log Parser"
 echo "------------------------------------------------------------------------------"
-cd "$source_dir"/log-parser || exit 1
+cd "$source_dir"/log_parser || exit 1
 pip install -r requirements.txt --target ./package
-cd "$source_dir"/log-parser/package || exit 1
+cd "$source_dir"/log_parser/package || exit 1
 zip -q -r9 "$build_dist_dir"/log-parser.zip .
-cd "$source_dir"/log-parser || exit 1
-zip -g "$build_dist_dir"/log-parser.zip log-parser.py
+cd "$source_dir"/log_parser || exit 1
+zip -g "$build_dist_dir"/log-parser.zip log-parser.py partition_s3_logs.py add_athena_partitions.py build_athena_queries.py
 zip -d "$build_dist_dir"/log-parser.zip 'LICENSE' 'README.*'
 
 echo "------------------------------------------------------------------------------"

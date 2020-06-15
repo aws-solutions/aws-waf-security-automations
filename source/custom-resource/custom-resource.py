@@ -1,5 +1,5 @@
 ######################################################################################################################
-#  Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
 #                                                                                                                    #
 #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
 #  with the License. A copy of the License is located at                                                             #
@@ -78,16 +78,31 @@ def configure_s3_bucket(region, bucket_name):
             s3_bucket_exists_waiter = s3_client.get_waiter('bucket_exists')
             s3_bucket_exists_waiter.wait(Bucket=bucket_name)
 
+            # Enable server side encryption on the S3 bucket
+            s3_client.put_bucket_encryption(
+                Bucket=bucket_name,
+                ServerSideEncryptionConfiguration={
+                    'Rules': [
+                        {
+                            'ApplyServerSideEncryptionByDefault': {
+                                'SSEAlgorithm': 'AES256'
+                            }
+                        },
+                    ]
+                }
+            )
+       
     logging.getLogger().debug("[configure_s3_bucket] End")
 
 #----------------------------------------------------------------------------------------------------------------------
-# Configure bucket event to call Log Parser whenever a new gz log or athena result file is added to the bucket
+# Configure bucket event to call Log Parser whenever a new gz log or athena result file is added to the bucket;
+# call partition s3 log function whenever athena log parser is chosen and a log file is added to the bucket
 #----------------------------------------------------------------------------------------------------------------------
-def add_s3_bucket_lambda_event(bucket_name, lambda_function_arn, lambda_parser, athena_parser):
+def add_s3_bucket_lambda_event(bucket_name, lambda_function_arn, lambda_log_partition_function_arn, lambda_parser, athena_parser):
     logging.getLogger().debug("[add_s3_bucket_lambda_event] Start")
 
     s3_client = boto3.client('s3')
-    if lambda_function_arn != None and (lambda_parser or athena_parser):
+    if lambda_function_arn is not None and (lambda_parser or athena_parser):
         notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
 
         new_conf = {}
@@ -103,7 +118,10 @@ def add_s3_bucket_lambda_event(bucket_name, lambda_function_arn, lambda_parser, 
             for lfc in notification_conf['LambdaFunctionConfigurations']:
                 for e in lfc['Events']:
                     if "ObjectCreated" in e:
-                        if lfc['LambdaFunctionArn'] != lambda_function_arn:
+                        if lfc['LambdaFunctionArn'] != lambda_function_arn and \
+                           (lambda_log_partition_function_arn is None or
+                            (lambda_log_partition_function_arn is not None and
+                             lfc['LambdaFunctionArn'] != lambda_log_partition_function_arn)):
                             new_conf['LambdaFunctionConfigurations'].append(lfc)
 
         if lambda_parser:
@@ -121,7 +139,18 @@ def add_s3_bucket_lambda_event(bucket_name, lambda_function_arn, lambda_parser, 
                 'Events': ['s3:ObjectCreated:*'],
                 'Filter': {'Key': {'FilterRules': [{'Name': 'prefix','Value': 'athena_results/'}, {'Name': 'suffix','Value': 'csv'}]}}
             })
-
+            
+        if lambda_log_partition_function_arn is not None:
+            new_conf['LambdaFunctionConfigurations'].append({
+                'Id': 'Call s3 log partition function',
+                'LambdaFunctionArn': lambda_log_partition_function_arn,
+                'Events': ['s3:ObjectCreated:*'],
+                'Filter': {'Key': {'FilterRules': [{'Name': 'prefix','Value': 'AWSLogs/'}, {'Name': 'suffix','Value': 'gz'}]}}
+            })
+            
+        logging.getLogger().info("[add_s3_bucket_lambda_event] LambdaFunctionConfigurations:\n %s"
+                                 %(new_conf['LambdaFunctionConfigurations']))
+                
         s3_client.put_bucket_notification_configuration(Bucket=bucket_name, NotificationConfiguration=new_conf)
 
     logging.getLogger().debug("[add_s3_bucket_lambda_event] End")
@@ -536,6 +565,32 @@ def generate_waf_log_parser_conf_file(stack_name, request_threshold, block_perio
     logging.getLogger().debug("[generate_waf_log_parser_conf_file] End")
 
 #======================================================================================================================
+# Add Athena Partitions
+#======================================================================================================================
+def add_athena_partitions(add_athena_partition_lambda_function, resource_type,
+                          glue_database, access_log_bucket, glue_access_log_table,
+                          glue_waf_log_table, waf_log_bucket, athena_work_group):
+    logging.getLogger().info("[add_athena_partitions] Start")
+
+    lambda_client = boto3.client('lambda')
+    response = lambda_client.invoke(
+        FunctionName=add_athena_partition_lambda_function.rsplit(":",1)[-1],
+        Payload="""{
+                "resourceType":"%s",
+                "glueAccessLogsDatabase":"%s",
+                "accessLogBucket":"%s",
+                "glueAppAccessLogsTable":"%s",
+                "glueWafAccessLogsTable":"%s",
+                "wafLogBucket":"%s",
+                "athenaWorkGroup":"%s"
+            }"""%(resource_type, glue_database, access_log_bucket,
+                  glue_access_log_table, glue_waf_log_table,
+                  waf_log_bucket, athena_work_group)
+    )
+    logging.getLogger().info("[add_athena_partitions] Lambda invocation response:\n%s"%response)
+    logging.getLogger().info("[add_athena_partitions] End")
+
+#======================================================================================================================
 # Auxiliary Functions
 #======================================================================================================================
 def send_response(event, context, responseStatus, responseData, resourceId, reason=None):
@@ -653,6 +708,7 @@ def lambda_handler(event, context):
         #----------------------------------------------------------
         if event['ResourceType'] == "Custom::ConfigureAppAccessLogBucket":
             lambda_log_parser_function = event['ResourceProperties']['LogParser'] if 'LogParser' in event['ResourceProperties'] else None
+            lambda_partition_s3_logs_function = event['ResourceProperties']['MoveS3LogsForPartition'] if 'MoveS3LogsForPartition' in event['ResourceProperties'] else None
             lambda_parser = True if event['ResourceProperties']['ScannersProbesLambdaLogParser'] == 'yes' else False
             athena_parser = True if event['ResourceProperties']['ScannersProbesAthenaLogParser'] == 'yes' else False
 
@@ -660,38 +716,48 @@ def lambda_handler(event, context):
                 configure_s3_bucket(event['ResourceProperties']['Region'], event['ResourceProperties']['AppAccessLogBucket'])
                 add_s3_bucket_lambda_event(event['ResourceProperties']['AppAccessLogBucket'],
                     lambda_log_parser_function,
+                    lambda_partition_s3_logs_function,
                     lambda_parser,
                     athena_parser)
 
             elif 'UPDATE' in request_type:
                 old_lambda_app_log_parser_function = event['OldResourceProperties']['LogParser'] if 'LogParser' in event['OldResourceProperties'] else None
+                old_lambda_partition_s3_logs_function = event['OldResourceProperties']['MoveS3LogsForPartition'] if 'MoveS3LogsForPartition' in event['OldResourceProperties'] else None
                 old_lambda_parser = True if event['OldResourceProperties']['ScannersProbesLambdaLogParser'] == 'yes' else False
                 old_athena_parser = True if event['OldResourceProperties']['ScannersProbesAthenaLogParser'] == 'yes' else False
 
                 if (event['OldResourceProperties']['AppAccessLogBucket'] != event['ResourceProperties']['AppAccessLogBucket'] or
                         old_lambda_app_log_parser_function != lambda_log_parser_function or
+                        old_lambda_partition_s3_logs_function != lambda_partition_s3_logs_function or
                         old_lambda_parser != lambda_parser or
                         old_athena_parser != athena_parser):
 
                     remove_s3_bucket_lambda_event(event['OldResourceProperties']["AppAccessLogBucket"],
                         old_lambda_app_log_parser_function)
+                    remove_s3_bucket_lambda_event(event['OldResourceProperties']["AppAccessLogBucket"],
+                        old_lambda_partition_s3_logs_function)
                     add_s3_bucket_lambda_event(event['ResourceProperties']['AppAccessLogBucket'],
                         lambda_log_parser_function,
+                        lambda_partition_s3_logs_function,
                         lambda_parser,
                         athena_parser)
 
             elif 'DELETE' in request_type:
                 remove_s3_bucket_lambda_event(event['ResourceProperties']["AppAccessLogBucket"],
                     lambda_log_parser_function)
-
+                remove_s3_bucket_lambda_event(event['ResourceProperties']["AppAccessLogBucket"],
+                    lambda_partition_s3_logs_function)
+                
         elif event['ResourceType'] == "Custom::ConfigureWafLogBucket":
             lambda_log_parser_function = event['ResourceProperties']['LogParser'] if 'LogParser' in event['ResourceProperties'] else None
+            lambda_partition_s3_logs_function = None
             lambda_parser = True if event['ResourceProperties']['HttpFloodLambdaLogParser'] == 'yes' else False
             athena_parser = True if event['ResourceProperties']['HttpFloodAthenaLogParser'] == 'yes' else False
 
             if 'CREATE' in request_type:
                 add_s3_bucket_lambda_event(event['ResourceProperties']['WafLogBucket'],
                     lambda_log_parser_function,
+                    lambda_partition_s3_logs_function,
                     lambda_parser,
                     athena_parser)
 
@@ -709,6 +775,7 @@ def lambda_handler(event, context):
                         old_lambda_app_log_parser_function)
                     add_s3_bucket_lambda_event(event['ResourceProperties']['WafLogBucket'],
                         lambda_log_parser_function,
+                        lambda_partition_s3_logs_function,
                         lambda_parser,
                         athena_parser)
 
@@ -795,6 +862,20 @@ def lambda_handler(event, context):
                 generate_waf_log_parser_conf_file(stack_name, request_threshold, block_period, waf_access_log_bucket, True)
             elif 'UPDATE' in request_type:
                 generate_waf_log_parser_conf_file(stack_name, request_threshold, block_period, waf_access_log_bucket, False)
+
+            # DELETE: do nothing
+
+        elif event['ResourceType'] == "Custom::AddAthenaPartitions":
+            if 'CREATE' in request_type or 'UPDATE' in request_type:
+                add_athena_partitions(
+                    event['ResourceProperties']['AddAthenaPartitionsLambda'],
+                    event['ResourceProperties']['ResourceType'],
+                    event['ResourceProperties']['GlueAccessLogsDatabase'],
+                    event['ResourceProperties']['AppAccessLogBucket'],
+                    event['ResourceProperties']['GlueAppAccessLogsTable'],
+                    event['ResourceProperties']['GlueWafAccessLogsTable'],
+                    event['ResourceProperties']['WafLogBucket'],
+                    event['ResourceProperties']['AthenaWorkGroup'])
 
             # DELETE: do nothing
 

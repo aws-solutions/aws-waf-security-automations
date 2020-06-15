@@ -1,4 +1,4 @@
-# Copyright 2019 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 # You may not use this file except in compliance with the License.
@@ -96,7 +96,14 @@ Conditions:
     - !Ref ActivateBadBotProtectionParam
     - 'yes'
 
+  AthenaLogParser: !Or
+    - Condition: HttpFloodAthenaLogParser
+    - Condition: ScannersProbesAthenaLogParser
 
+  CustomResourceLambdaAccess: !Or
+    - Condition: ReputationListsProtectionActivated
+    - Condition: AthenaLogParser
+   
 Resources:
   WAFWhitelistSet:
     Type: 'AWS::WAF::IPSet'
@@ -359,7 +366,7 @@ Resources:
                     - 'athena:GetNamedQuery'
                     - 'athena:StartQueryExecution'
                   Resource:
-                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/*'
+                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/WAF*'
                 # S3 Resources
                 - Effect: Allow
                   Action:
@@ -378,6 +385,7 @@ Resources:
                 - Effect: Allow
                   Action:
                     - 'glue:GetTable'
+                    - 'glue:GetPartitions'
                   Resource:
                     - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
                     - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueAccessLogsDatabase}'
@@ -418,7 +426,7 @@ Resources:
                     - 'athena:GetNamedQuery'
                     - 'athena:StartQueryExecution'
                   Resource:
-                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/*'
+                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/WAF*'
                 # S3 Resources
                 - Effect: Allow
                   Action:
@@ -437,6 +445,7 @@ Resources:
                 - Effect: Allow
                   Action:
                     - 'glue:GetTable'
+                    - 'glue:GetPartitions'
                   Resource:
                     - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
                     - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueAccessLogsDatabase}'
@@ -475,6 +484,164 @@ Resources:
               WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
               LogsAccess - permission restricted to account, region and log group name substring (LogParser);
               CloudWatchAccess - this actions does not support resource-level permissions
+
+  LambdaRolePartitionS3Logs:
+    Type: 'AWS::IAM::Role'
+    Condition: ScannersProbesAthenaLogParser
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              LogsAccess - permission restricted to account, region and log group name substring (MoveS3LogsForPartition)
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: '/'
+      Policies:
+        - !If
+          - ScannersProbesAthenaLogParser
+          - PolicyName: PartitionS3LogsAccess
+            PolicyDocument:
+              Statement:
+                # S3 Resources
+                - Effect: Allow
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:DeleteObject'
+                    - 's3:PutObject'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/*'
+          - !Ref 'AWS::NoValue'
+        - PolicyName: LogsAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*MoveS3LogsForPartition*'
+
+  LambdaRoleAddAthenaPartitions:
+    Type: 'AWS::IAM::Role'
+    Condition: AthenaLogParser
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              LogsAccess - permission restricted to account, region and log group name substring (AddAthenaPartitions)
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Path: '/'
+      Policies:
+        - !If
+          - ScannersProbesAthenaLogParser
+          - PolicyName: AddAthenaPartitionsForAppAccessLog
+            PolicyDocument:
+              Statement:
+                # S3 Resources
+                - Effect: Allow
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:PutObject'
+                    - 's3:GetBucketLocation'
+                    - 's3:ListBucket'
+                    - 's3:ListBucketMultipartUploads'
+                    - 's3:ListMultipartUploadParts'
+                    - 's3:AbortMultipartUpload'
+                    - 's3:CreateBucket'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/athena_results/*'
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}'
+                    - !Sub 'arn:aws:s3:::${AppAccessLogBucket}/*'
+                # Athena Resources
+                - Effect: Allow
+                  Action:
+                    - 'athena:StartQueryExecution'
+                  Resource:
+                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/WAF*'
+                # Glue Resources
+                - Effect: Allow
+                  Action:
+                    - 'glue:GetTable'
+                    - 'glue:GetDatabase'
+                    - 'glue:UpdateDatabase'
+                    - 'glue:CreateDatabase'
+                    - 'glue:BatchCreatePartition'
+                  Resource:
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/default'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueAccessLogsDatabase}'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueAccessLogsDatabase}/${GlueAppAccessLogsTable}'
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HttpFloodAthenaLogParser
+          - PolicyName: AddAthenaPartitionsForWAFLog
+            PolicyDocument:
+              Statement:
+                # S3 Resources
+                - Effect: Allow
+                  Action:
+                    - 's3:GetObject'
+                    - 's3:PutObject'
+                    - 's3:GetBucketLocation'
+                    - 's3:ListBucket'
+                    - 's3:ListBucketMultipartUploads'
+                    - 's3:ListMultipartUploadParts'
+                    - 's3:AbortMultipartUpload'
+                    - 's3:CreateBucket'
+                  Resource:
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/athena_results/*'
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}'
+                    - !Sub 'arn:aws:s3:::${WafLogBucket}/*'
+                # Athena Resources
+                - Effect: Allow
+                  Action:
+                    - 'athena:StartQueryExecution'
+                  Resource:
+                    - !Sub 'arn:aws:athena:${AWS::Region}:${AWS::AccountId}:workgroup/WAF*'
+                # Glue Resources
+                - Effect: Allow
+                  Action:
+                    - 'glue:GetTable'
+                    - 'glue:GetDatabase'
+                    - 'glue:UpdateDatabase'
+                    - 'glue:CreateDatabase'
+                    - 'glue:BatchCreatePartition'
+                  Resource:
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:catalog'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/default'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:database/${GlueAccessLogsDatabase}'
+                    - !Sub 'arn:aws:glue:${AWS::Region}:${AWS::AccountId}:table/${GlueAccessLogsDatabase}/${GlueWafAccessLogsTable}'
+          - !Ref 'AWS::NoValue'
+        - PolicyName: LogsAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*AddAthenaPartitions*'
 
   LambdaRoleReputationListsParser:
     Type: 'AWS::IAM::Role'
@@ -606,6 +773,16 @@ Resources:
 
   LambdaRoleCustomResource:
     Type: 'AWS::IAM::Role'
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: >-
+              WAFAccess, WAFRuleAccess, WAFIPSetAccess and WAFRateBasedRuleAccess - restricted to WafArnPrefix/AccountId;
+              CloudFormationAccess - account, region and stack name;
+              WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
+              LogsAccess - permission restricted to account, region and log group name substring (CustomResource);
     Properties:
       AssumeRolePolicyDocument:
         Statement:
@@ -625,6 +802,7 @@ Resources:
                   - 's3:CreateBucket'
                   - 's3:GetBucketNotification'
                   - 's3:PutBucketNotification'
+                  - 's3:PutEncryptionConfiguration'
                 Resource:
                   - !Sub 'arn:aws:s3:::${AppAccessLogBucket}'
         - !If
@@ -671,7 +849,7 @@ Resources:
                     - !Sub 'arn:aws:s3:::${WafLogBucket}/${ParentStackName}-waf_log_conf.json'
           - !Ref 'AWS::NoValue'
         - !If
-          - ReputationListsProtectionActivated
+          - CustomResourceLambdaAccess
           - PolicyName: LambdaAccess
             PolicyDocument:
               Statement:
@@ -766,16 +944,6 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*CustomResource*'
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W11
-            reason: >-
-              WAFAccess, WAFRuleAccess, WAFIPSetAccess and WAFRateBasedRuleAccess - restricted to WafArnPrefix/AccountId;
-              CloudFormationAccess - account, region and stack name;
-              WAFGetChangeToken - restricted to WafArnPrefix/AccountId;
-              LogsAccess - permission restricted to account, region and log group name substring (CustomResource);
 
 Outputs:
   WAFWhitelistSet:
@@ -853,3 +1021,11 @@ Outputs:
 
   LambdaRoleCustomResourceArn:
     Value: !GetAtt LambdaRoleCustomResource.Arn
+
+  LambdaRolePartitionS3LogsArn:
+    Value: !GetAtt LambdaRolePartitionS3Logs.Arn
+    Condition: ScannersProbesAthenaLogParser
+
+  LambdaRoleAddAthenaPartitionsArn:
+    Value: !GetAtt LambdaRoleAddAthenaPartitions.Arn
+    Condition: AthenaLogParser
