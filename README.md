@@ -9,12 +9,14 @@ This project consists of microservices that facilitate the functional areas of t
 ```
 |-deployment/ [folder containing templates and build scripts]
 |-source/
-  |-access-handler/ [microservice for processing bad bots honeypot endpoint access. This AWS Lambda function intercepts the suspicious request and adds the source IP address to the AWS WAF block list]
-  |-custom-resource/ [custom helper for CloudFormation deployment template]
+  |-access_handler/ [microservice for processing bad bots honeypot endpoint access. This AWS Lambda function intercepts the suspicious request and adds the source IP address to the AWS WAF block list]
+  |-custom_resource/ [custom helper for CloudFormation deployment template]
   |-helper/ [custom helper for CloudFormation deployment dependency check and auxiliary functions]
+  |-lib/ [library files including waf api calls and other common functions used in the solution]
   |-log_parser/ [microservice for processing access logs searching for suspicious behavior and add the corresponding source IP addresses to an AWS WAF block list]
-  |-reputation-lists-parser/ [microservice for processing third-party IP reputation lists and add malicious IP addresses to an AWS WAF block list]
+  |-reputation_lists_parser/ [microservice for processing third-party IP reputation lists and add malicious IP addresses to an AWS WAF block list]
   |-tests/ [unit tests]
+  |-timer/ [creates a sleep function for cloudformation to pace the creation of ip_sets]
 ```
 
 ## Getting Started
@@ -23,13 +25,12 @@ This project consists of microservices that facilitate the functional areas of t
 The following procedures assumes that all of the OS-level configuration has been completed. They are:
 
 * [AWS Command Line Interface](https://aws.amazon.com/cli/)
-* Node.js 10.x
 * Python 3.8
 
-The AWS WAF Security Automations solution is developed with Node.js and Python for the microservices that run in AWS Lambda. The latest version has been tested with Node.js v10.x and Python v3.8.
+The AWS WAF Security Automations solution is developed with Python for the microservices that run in AWS Lambda. The latest version has been tested with Python v3.8.
 
 #### 02. Clone AWS WAF Security Automations repository
-Clone the aws-waf-security-automations GitHub repository, then make the desired code changes
+Clone the aws-waf-security-automations GitHub repository:
 
 ```
 git clone https://github.com/awslabs/aws-waf-security-automations.git
@@ -52,7 +53,7 @@ export SOLUTION_NAME="aws-waf-security-automations" # name of the solution
 export VERSION=<VERSION> # version number for the customized code
 export AWS_REGION=<AWS_REGION> # region where the distributable is deployed
 ```
-# _Note:_ You must manually create two buckets in S3 called $TEMPLATE_OUTPUT_BUCKET and $DIST_OUTPUT_BUCKET-$AWS_REGION to copy the distribution. The assets in bucket should be publicly accessible. The build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
+#### _Note:_ You must manually create two buckets in S3 called $TEMPLATE_OUTPUT_BUCKET and $DIST_OUTPUT_BUCKET-$AWS_REGION to copy the distribution. The assets in bucket should be publicly accessible. The build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
 
 #### 05. Build the AWS WAF Security Automations solution for deployment:
 ```
@@ -63,7 +64,7 @@ chmod +x ./build-s3-dist.sh && ./build-s3-dist.sh $TEMPLATE_OUTPUT_BUCKET $DIST_
 aws s3 cp ./deployment/global-s3-assets s3://$TEMPLATE_OUTPUT_BUCKET/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
 aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
 ```
-# _Note:_ You must use proper acl and profile for the copy operation as applicable.
+#### _Note:_ You must use proper acl and profile for the copy operation as applicable.
 
 #### 07. Deploy the AWS WAF Security Automations solution:
 * From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template.

@@ -19,3 +19,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented Athena optimization: added partitioning for CloudFront, ALB and WAF logs and Athena queries
 ### Changed
 - Fixed potential DoS vector within Bad Bots X-Forward-For header
+## [3.0] - 2020-07-08
+### Added
+- Added an option to deploy AWS Managed Rules for WebACL on installation
+### Changed
+- Upgraded from WAF classic to WAFV2 API
+- Eliminated dependency on NodeJS and use Python as the standardized programming language

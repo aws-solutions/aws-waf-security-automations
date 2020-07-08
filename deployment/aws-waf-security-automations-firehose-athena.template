@@ -52,9 +52,7 @@ Conditions:
     - !Ref EndpointType
     - 'ALB'
 
-  CloudFrontEndpoint: !Equals
-    - !Ref EndpointType
-    - 'CloudFront'
+  CloudFrontEndpoint: !Not [Condition: AlbEndpoint]
 
   HttpFloodLambdaLogParser: !Equals
     - !Ref ActivateHttpFloodProtectionParam
@@ -83,7 +81,6 @@ Conditions:
   AthenaLogParser: !Or
     - Condition: HttpFloodAthenaLogParser
     - Condition: ScannersProbesAthenaLogParser
-
 
 Resources:
   # Ref: https://amzn.to/2GX48Pr
@@ -139,6 +136,7 @@ Resources:
             -
               id: W11
               reason: "S3Access restricted to WafLogBucket and CloudWatchAccess to DeliveryStreamName."
+
 
   FirehoseWAFLogsDeliveryStream:
     Type: AWS::KinesisFirehose::DeliveryStream
@@ -448,18 +446,9 @@ Outputs:
     Value: !Ref GlueWafAccessLogsTable
     Condition: HttpFloodAthenaLogParser
 
-  ALBGlueAppAccessLogsTable:
-    Value: !Ref ALBGlueAppAccessLogsTable
-    Condition: ALBScannersProbesAthenaLogParser
-
-  CloudFrontGlueAppAccessLogsTable:
-    Value: !Ref CloudFrontGlueAppAccessLogsTable
-    Condition: CloudFrontScannersProbesAthenaLogParser
-
   GlueAppAccessLogsTable:
-    Description: Glue table for application access logs
-    Value: !If [CloudFrontEndpoint, !Ref CloudFrontGlueAppAccessLogsTable, !Ref ALBGlueAppAccessLogsTable]
     Condition: ScannersProbesAthenaLogParser
+    Value: !If [AlbEndpoint, !Ref ALBGlueAppAccessLogsTable, !Ref CloudFrontGlueAppAccessLogsTable]
 
   WAFAddPartitionAthenaQueryWorkGroup:
     Description: Athena WorkGroup for adding Athena partition queries used by AWS WAF Security Automations Solution
@@ -475,3 +464,6 @@ Outputs:
     Description: Athena WorkGroup for CloudFront or ALB application access log queries used by AWS WAF Security Automations Solution
     Value: !Ref WAFAppAccessLogAthenaQueryWorkGroup
     Condition: ScannersProbesAthenaLogParser
+
+  Version:
+    Value: "%VERSION%"
