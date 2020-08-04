@@ -605,6 +605,121 @@ Resources:
                           Type: HTML_ENTITY_DECODE
           - !Ref 'AWS::NoValue'
 
+  WAFRuleGroup:
+    Type: AWS::WAFv2::RuleGroup
+    Properties:
+      Name: !Sub '${ParentStackName}RuleGroup'
+      Description: 'Custom WAF RuleGroup for use in Firewall Manager. Excludes Rate, XSS and SQL Injection rules, they can be included separately if needed'
+      Scope: !Sub '${RegionScope}'
+      Capacity: 100
+      VisibilityConfig: 
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WAFRuleGroup']]
+      Rules:
+        - Name: !Sub '${ParentStackName}WhitelistRule'
+          Priority: 1
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WhitelistRule']]
+          Statement:
+            OrStatement:
+              Statements:
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFWhitelistSetV4.Arn
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFWhitelistSetV6.Arn
+        - Name: !Sub '${ParentStackName}BlacklistRule'
+          Priority: 2
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BlacklistRule']]
+          Statement:
+            OrStatement:
+              Statements:
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFBlacklistSetV4.Arn
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFBlacklistSetV6.Arn
+        - !If
+          - HttpFloodProtectionLogParserActivated
+          - Name: !Sub '${ParentStackName}HttpFloodRegularRule'
+            Priority: 3
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'HttpFloodRegularRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFHttpFloodSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFHttpFloodSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ScannersProbesProtectionActivated
+          - Name: !Sub '${ParentStackName}ScannersAndProbesRule'
+            Priority: 5
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'ScannersProbesRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFScannersProbesSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFScannersProbesSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ReputationListsProtectionActivated
+          - Name: !Sub '${ParentStackName}IPReputationListsRule'
+            Priority: 6
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'IPReputationListsRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFReputationListsSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFReputationListsSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - BadBotProtectionActivated
+          - Name: !Sub '${ParentStackName}BadBotRule'
+            Priority: 7
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BadBotRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFBadBotSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFBadBotSetV6.Arn
+          - !Ref 'AWS::NoValue'
+
 Outputs:
 # Arns
   WAFWhitelistSetV4Arn:
@@ -710,6 +825,13 @@ Outputs:
 
   WAFWebACLArn:
     Value: !GetAtt WAFWebACL.Arn
+
+  WAFRuleGroup:
+    Value: !Ref WAFRuleGroup
+
+  WAFRuleGroupArn:
+    Value: !GetAtt WAFRuleGroup.Arn
+
 
   WAFWebACLMetricName:
     Value: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'MaliciousRequesters']]
