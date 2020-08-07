@@ -47,6 +47,7 @@ Metadata:
           - ErrorThreshold
           - RequestThreshold
           - WAFBlockPeriod
+          - BadBotBlockPeriod
           - KeepDataInOriginalS3Location
 
     ParameterLabels:
@@ -85,6 +86,9 @@ Metadata:
 
       WAFBlockPeriod:
         default: WAF Block Period
+
+      BadBotBlockPeriod:
+        default: Bad Bot Block Period
 
       KeepDataInOriginalS3Location:
         default: Keep Data in Original s3 location
@@ -197,6 +201,15 @@ Parameters:
       If you chose yes for the Activate Scanners & Probes Protection or HTTP Flood Lambda/Athena log
       parser parameters, enter the period (in minutes) to block applicable IP addresses. If you
       chose to deactivate log parsing, ignore this parameter.
+
+  BadBotBlockPeriod:
+    Type: Number
+    Default: 14400
+    MinValue: 0
+    Description: >-
+      The period in seconds that an offending IP will remain in the Bad Bots IP List before it is 
+      automatically removed. If you choose not to activate the bat bot protection,
+      ignore this parameter.
 
   KeepDataInOriginalS3Location:
     Type: String
@@ -461,6 +474,19 @@ Resources:
                 Action: 'cloudwatch:GetMetricStatistics'
                 Resource:
                   - '*'
+        - PolicyName: StepFunctionAccess
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action: 
+                  - 'states:StartExecution'
+                  - 'states:ListExecutions'
+                Resource:
+                  - !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:BadBotUnblockIP-${AWS::StackName}-%VERSION%'
+              - Effect: Allow
+                Action: 'states:StopExecution'
+                Resource: '*'
+
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -1391,10 +1417,60 @@ Resources:
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
           STACK_NAME: !Ref 'AWS::StackName'
+          UNBLOCK_IP_STATE_MACHINE_ARN: !Sub 'arn:aws:states:${AWS::Region}:${AWS::AccountId}:stateMachine:BadBotUnblockIP-${AWS::StackName}-%VERSION%'
 
       Runtime: python3.8
       MemorySize: 128
       Timeout: 300
+  
+  BadBotUnblockIPStateMachine:
+    Type: "AWS::StepFunctions::StateMachine"
+    Condition: BadBotProtectionActivated
+    Properties:
+      # Hard coded name is defined here to get around Circular dependency between StateMachine and Lambda function.
+      StateMachineName: !Sub 'BadBotUnblockIP-${AWS::StackName}-%VERSION%'
+      DefinitionString:
+        !Sub
+          - |-
+            {
+             "StartAt": "WaitForTime",
+              "States": {
+                  "WaitForTime": {
+                    "Type": "Wait",
+                    "Seconds": ${BadBotBlockPeriodSeconds},
+                    "Next": "UnblockIP"
+                  },
+              "UnblockIP": {
+                      "Type": "Task",
+                      "Resource": "${lambdaArn}",
+                      "End": true
+                  }
+              }
+            }
+          - { lambdaArn: !GetAtt [ BadBotParser, Arn ], BadBotBlockPeriodSeconds: !Ref BadBotBlockPeriod }
+      RoleArn: !GetAtt [ StateMachineRoleUnlockBadBotIP, Arn ]
+
+  StateMachineRoleUnlockBadBotIP:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - !Sub states.${AWS::Region}.amazonaws.com
+            Action: "sts:AssumeRole"
+      Path: "/"
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource: !GetAtt [ BadBotParser, Arn ]
 
   LambdaInvokePermissionBadBot:
     Type: 'AWS::Lambda::Permission'

@@ -199,17 +199,28 @@ def lambda_handler(event, context):
         ipset_name_v6 = os.getenv('IP_SET_NAME_BAD_BOTV6')
         ipset_arn_v4 = os.getenv('IP_SET_ID_BAD_BOTV4')
         ipset_arn_v6 = os.getenv('IP_SET_ID_BAD_BOTV6')
+        unblock_state_machine_arn = os.getenv('UNBLOCK_IP_STATE_MACHINE_ARN')
 
         # Fixed as old line had security exposure based on user supplied IP address
         log.info("Event->%s<-", str(event))
-        source_ip = str(event['requestContext']['identity']['sourceIp'])
+        source_ip = ''
+        block = True
+        # favour code readbility over shortcuts
+        if event.get("unblock"):
+            source_ip = event['source_ip'] 
+            block = False
+        else:            
+            source_ip = event['headers']['X-Forwarded-For'].split(',')[0].strip() \
+                if event['requestContext']['identity']['userAgent'] == 'Amazon CloudFront' \
+                    else str(event['requestContext']['identity']['sourceIp'])
 
         log.info("scope = %s", scope)
         log.info("ipset_name_v4 = %s", ipset_name_v4)
         log.info("ipset_name_v6 = %s", ipset_name_v6)
         log.info("IPARNV4 = %s", ipset_arn_v4)
         log.info("IPARNV6 = %s", ipset_arn_v6)
-        log.info("source_ip = %s", source_ip)
+        log.info("UNBLOCK_IP_STATE_MACHINE_ARN = %s", unblock_state_machine_arn)
+        log.info("%s source_ip = %s", ("Block" if block else "Unblock"), source_ip)
     except Exception as e:
         log.error(e)
         raise
@@ -225,7 +236,7 @@ def lambda_handler(event, context):
             log.info(ipset)
             current_list = ipset["IPSet"]["Addresses"]
             log.info(current_list)
-            new_list = list(set(current_list) | set(new_address))
+            new_list = list(set(current_list) | set(new_address)) if block else list(set(current_list) - set(new_address))
             log.info(new_list)
             output = waflib.update_ip_set(log, scope, ipset_name_v4, ipset_arn_v4, new_list)
         elif ip_type == "IPV6":
@@ -236,9 +247,11 @@ def lambda_handler(event, context):
             log.info(ipset)
             current_list = ipset["IPSet"]["Addresses"]
             log.info(current_list)
-            new_list = list(set(current_list) | set(new_address))
+            new_list = list(set(current_list) | set(new_address)) if block else list(set(current_list) - set(new_address))
             log.info(new_list)
             output = waflib.update_ip_set(log, scope, ipset_name_v6, ipset_arn_v6, new_list)
+        if block:
+            setup_unblock_future_execution(ip_type, source_ip, unblock_state_machine_arn, log)
     except Exception as e:
         log.error(e)
         raise
@@ -256,3 +269,50 @@ def lambda_handler(event, context):
     log.info('[lambda_handler] End')
 
     return response
+
+#======================================================================================================================
+# Step Function to wait for a while before it invokes this Lambda again to unblock the IP from Bad Bot blocked IP list
+#======================================================================================================================
+def setup_unblock_future_execution(ip_type, source_ip, arn, log):
+    time_now = datetime.datetime.utcnow()
+    # granularity of 1 minute is sufficient. Normally a bot would be blocked from making further requests,
+    # but if for some reason further requests are made the unblock step function exeuction is effectively 
+    # "moved forward" so that the IP is not unblocked until xx seconds after the last "hit"
+    time_stamp = time_now.strftime("%Y%m%d%H%M")
+
+    prefix = source_ip.replace(':', '-').replace('.', '-')
+    name_of_execution = prefix + '-' + time_stamp
+
+    log.info("execution name: {}".format(prefix))
+    ip_to_pass = {
+        "unblock": "true", 
+        "source_ip": source_ip
+    }
+    stepfunctions = boto3.client('stepfunctions')
+
+    response = stepfunctions.list_executions(
+        stateMachineArn=arn,
+        statusFilter='RUNNING',
+        maxResults=1000)
+    
+    log.debug(response)
+    if response.get('executions'):
+        previous = [v for v in response['executions'] if v['name'].startswith(prefix) and v['name'] < name_of_execution]
+        log.debug(previous)
+    
+        if previous:
+            arn_to_be_cancelled = previous[0]['executionArn']
+            log.info("About to cancel execution {}".format(arn_to_be_cancelled))
+            try:
+                cancel_previous = stepfunctions.stop_execution(executionArn=arn_to_be_cancelled, cause="push unblock time forward")
+                log.debug(cancel_previous)
+                log.info("Previous Unblock of IP %s Aborted, Timer being reset", source_ip)
+            except:
+                log.info("Previous execution for ip {} did not abort successfully".format(source_ip), exc_info=True)
+
+    response = stepfunctions.start_execution(
+        stateMachineArn=arn,
+        name=name_of_execution,
+        input=json.dumps(ip_to_pass)
+        )
+    log.debug("Response from State Machine: {}".format(response))
