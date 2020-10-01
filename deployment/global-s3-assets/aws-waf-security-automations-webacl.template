@@ -13,7 +13,7 @@
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-WebACL) - AWS WAF Security Automations %VERSION%: This AWS CloudFormation template helps
+  (SO0006-WebACL) - AWS WAF Security Automations 3.3: This AWS CloudFormation template helps
   you provision the AWS WAF Security Automations stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
@@ -110,9 +110,9 @@ Conditions:
 Mappings:
   SourceCode:
     General:
-      TemplateBucket: '%TEMPLATE_OUTPUT_BUCKET%'
-      SourceBucket: '%DIST_OUTPUT_BUCKET%'
-      KeyPrefix: '%SOLUTION_NAME%/%VERSION%'
+      TemplateBucket: 'pkwaf-template-output-bucket'
+      SourceBucket: 'pkwaf-dist-output-bucket'
+      KeyPrefix: 'aws-waf-security-automations/3.3'
 
 Resources:
 # Timers
@@ -727,7 +727,7 @@ Outputs:
     Value: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'IPReputationListsRule']]
 
   Version:
-    Value: "%VERSION%"
+    Value: "3.3"
 
 # Ids
   WAFWhitelistSetV4Id:
