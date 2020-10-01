@@ -98,6 +98,7 @@ Conditions:
   BadBotProtectionActivated: !Equals
     - !Ref ActivateBadBotProtectionParam
     - 'yes'
+    
 
 Mappings:
   SourceCode:
@@ -603,6 +604,113 @@ Resources:
                           Type: URL_DECODE
                         - Priority: 2
                           Type: HTML_ENTITY_DECODE
+          - !Ref 'AWS::NoValue'
+  WAFSecAutomationsSecurityGroup:
+    Type: AWS::WAFv2::RuleGroup
+    Properties:
+      Name: !Ref 'ParentStackName'
+      Description: 'Custom WAFSecurityGroup'
+      Scope: !Sub '${RegionScope}'
+      VisibilityConfig: 
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WAFSecAutomationsSecurityGroup']]
+      Capacity: 10
+      Tags:
+        - Key: Division
+          Value: "ITRMS"
+        - Key: Consumer
+          Value: "gsw-cdn-eng@merck.com"
+        - Key: Costcenter
+          Value: "10000101"
+        - Key: Environment
+          Value: "Production"
+        - Key: Application
+          Value: "WAF"
+      Rules:
+        - Name: !Sub '${ParentStackName}WhitelistRule'
+          Priority: 1
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WhitelistRule']]
+          Statement:
+            OrStatement:
+              Statements:
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFWhitelistSetV4.Arn
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFWhitelistSetV6.Arn
+        - Name: !Sub '${ParentStackName}BlacklistRule'
+          Priority: 2
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BlacklistRule']]
+          Statement:
+            OrStatement:
+              Statements:
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFBlacklistSetV4.Arn
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFBlacklistSetV6.Arn
+        - !If
+          - ScannersProbesProtectionActivated
+          - Name: !Sub '${ParentStackName}ScannersAndProbesRule'
+            Priority: 5
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'ScannersProbesRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFScannersProbesSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFScannersProbesSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ReputationListsProtectionActivated
+          - Name: !Sub '${ParentStackName}IPReputationListsRule'
+            Priority: 6
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'IPReputationListsRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFReputationListsSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFReputationListsSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - BadBotProtectionActivated
+          - Name: !Sub '${ParentStackName}BadBotRule'
+            Priority: 7
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BadBotRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFBadBotSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFBadBotSetV6.Arn
           - !Ref 'AWS::NoValue'
 
 Outputs:
