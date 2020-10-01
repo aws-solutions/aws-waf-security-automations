@@ -88,6 +88,12 @@ Metadata:
 
       KeepDataInOriginalS3Location:
         default: Keep Data in Original s3 location
+      
+      UsePermissionBoundaryParam:
+        default: Use Permission Boundary
+
+      PermissionsBoundary:
+        default: Permission Boundary
 
 Parameters:
   ActivateAWSManagedRulesParam:
@@ -210,6 +216,21 @@ Parameters:
       from their original location to a partitioned folder structure in s3. Choose Yes if you also want
       to keep a copy of the logs in their original location. Selecting "Yes" will duplicate your log
       storage. If you did not choose to activate Athena log parsing, ignore this parameter.
+  
+  UsePermissionBoundaryParam:
+    Type: String
+    Default: 'yes'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: Choose yes to enable permission boundaries.
+
+  WafPermissionBoundary:
+    Type: String
+    Default: ''
+    Description: >-
+      The arn of your PB
+   
 
 Conditions:
   HttpFloodProtectionRateBasedRuleActivated: !Equals
@@ -258,6 +279,10 @@ Conditions:
 
   BadBotProtectionActivated: !Equals
     - !Ref ActivateBadBotProtectionParam
+    - 'yes'
+
+  UsePermissionBoundary: !Equals
+    - !Ref UsePermissionBoundaryParam
     - 'yes'
 
   AlbEndpoint: !Equals
@@ -355,6 +380,9 @@ Resources:
         GlueAppAccessLogsTable: !If [ScannersProbesAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueAppAccessLogsTable, '']
         GlueWafAccessLogsTable: !If [HttpFloodAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueWafAccessLogsTable,'']
         LogLevel: !FindInMap ["Solution", "Data", "LogLevel"]
+        UsePermissionBoundaryParam: !Ref UsePermissionBoundaryParam
+        WafPermissionBoundary: !Ref WafPermissionBoundary
+
 
 
 
@@ -371,6 +399,7 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - PolicyName: S3Access
           PolicyDocument:
@@ -426,6 +455,7 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - PolicyName: LogsAccess
           PolicyDocument:
@@ -482,6 +512,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action: 'sts:AssumeRole'
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]  
       Policies:
         - PolicyName: CloudWatchLogs
           PolicyDocument:
@@ -542,6 +573,7 @@ Resources:
             Action:
               - sts:AssumeRole
       Path: '/'
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - !If
           - ScannersProbesProtectionActivated
@@ -699,6 +731,7 @@ Resources:
             Action:
               - 'sts:AssumeRole'
       Path: /
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - PolicyName: S3AccessGeneralAppAccessLog
           PolicyDocument:
@@ -853,6 +886,7 @@ Resources:
             Action:
               - sts:AssumeRole
       Path: '/'
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - !If
           - ScannersProbesAthenaLogParser
@@ -899,6 +933,7 @@ Resources:
             Action:
               - sts:AssumeRole
       Path: '/'
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - !If
           - ScannersProbesAthenaLogParser
@@ -1521,6 +1556,7 @@ Resources:
           Effect: Allow
           Principal:
             Service: apigateway.amazonaws.com
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
       -  PolicyName: LambdaRestApiCloudWatchRole
          PolicyDocument:

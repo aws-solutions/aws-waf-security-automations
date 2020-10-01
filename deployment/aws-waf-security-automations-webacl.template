@@ -49,6 +49,10 @@ Parameters:
     Type: String
   LogLevel:
     Type: String
+  UsePermissionBoundaryParam:
+    Type: String
+  WafPermissionBoundary:
+    Type: String
 
 Conditions:
   AWSManagedRulesActivated: !Equals
@@ -97,6 +101,10 @@ Conditions:
 
   BadBotProtectionActivated: !Equals
     - !Ref ActivateBadBotProtectionParam
+    - 'yes'
+    
+  UsePermissionBoundary: !Equals
+    - !Ref UsePermissionBoundaryParam
     - 'yes'
 
 Mappings:
@@ -326,6 +334,7 @@ Resources:
               Service:
                 - lambda.amazonaws.com
             Action: 'sts:AssumeRole'
+      PermissionsBoundary: !If [UsePermissionBoundary, !Ref WafPermissionBoundary, !Ref "AWS::NoValue"]
       Policies:
         - PolicyName: CloudWatchLogs
           PolicyDocument:
