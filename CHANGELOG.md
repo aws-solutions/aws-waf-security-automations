@@ -19,3 +19,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented Athena optimization: added partitioning for CloudFront, ALB and WAF logs and Athena queries
 ### Changed
 - Fixed potential DoS vector within Bad Bots X-Forward-For header
+## [2.3.3] - 2020-10-30
+### Changed
+- Replaced s3 path-style with virtual-hosted style
