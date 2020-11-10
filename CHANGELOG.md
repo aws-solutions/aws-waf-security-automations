@@ -25,3 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Upgraded from WAF classic to WAFV2 API
 - Eliminated dependency on NodeJS and use Python as the standardized programming language
+## [3.1] - 2020-10-22
+### Changed
+- Replaced s3 path-style with virtual-hosted style
+- Added partition variable to all ARNs 
+- Updated bug report

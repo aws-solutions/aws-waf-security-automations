@@ -6,3 +6,5 @@
 **/package-lock.json
 **/.pyc
 /deployment/open-source/
+source/tests/__pycache__/
+source/log_parser/__pycache__/

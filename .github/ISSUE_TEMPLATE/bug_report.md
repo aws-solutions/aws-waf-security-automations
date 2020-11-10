@@ -17,16 +17,17 @@ Steps to reproduce the behavior.
 A clear and concise description of what you expected to happen.
 
 **Please complete the following information about the solution:**
-- [ ] Version: [e.g. v1.0.0]
+- [ ] Version: [e.g. v3.1]
 
-To get the version of the solution, you can look at the description of the created CloudFormation stack. For example, "_(SO0021) - Video On Demand workflow with AWS Step Functions, MediaConvert, MediaPackage, S3, CloudFront and DynamoDB. Version **v5.0.0**_". If the description does not contain the version information, you can look at the mappings section of the template:
+To get the version of the solution, you can look at the description of the created CloudFormation stack. For example, "AWS WAF Security Automations v3.1: This AWS CloudFormation template helps you provision the AWS WAF Security Automations stack without worrying about creating and configuring the underlying AWS infrastructure". If the description does not contain the version information, you can look at the mappings section of the template:
 
 ```yaml
 Mappings:
   SourceCode:
     General:
-      S3Bucket: "solutions"
-      KeyPrefix: "video-on-demand-on-aws/v5.0.0"
+      TemplateBucket: 'solutions-reference'
+      SourceBucket: 'solutions'
+      KeyPrefix: 'waf-security-automation/v3.1'
 ```
 
 - [ ] Region: [e.g. us-east-1]

@@ -110,8 +110,8 @@ Resources:
                   - s3:ListBucketMultipartUploads
                   - s3:PutObject
                 Resource:
-                  - !Sub 'arn:aws:s3:::${WafLogBucket}'
-                  - !Sub 'arn:aws:s3:::${WafLogBucket}/*'
+                  - !Sub 'arn:${AWS::Partition}:s3:::${WafLogBucket}'
+                  - !Sub 'arn:${AWS::Partition}:s3:::${WafLogBucket}/*'
         - PolicyName: KinesisAccess
           PolicyDocument:
             Statement:
@@ -121,7 +121,7 @@ Resources:
                   - kinesis:GetShardIterator
                   - kinesis:GetRecords
                 Resource:
-                  - !Sub 'arn:aws:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${DeliveryStreamName}'
+                  - !Sub 'arn:${AWS::Partition}:kinesis:${AWS::Region}:${AWS::AccountId}:stream/${DeliveryStreamName}'
         - PolicyName: CloudWatchAccess
           PolicyDocument:
             Statement:
@@ -129,7 +129,7 @@ Resources:
                 Action:
                   - 'logs:PutLogEvents'
                 Resource:
-                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/${DeliveryStreamName}:*'
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/kinesisfirehose/${DeliveryStreamName}:*'
       Metadata:
         cfn_nag:
           rules_to_suppress:
