@@ -12,13 +12,13 @@
 #  - trademarked-solution-name: name of the solution for consistency 
 #  - version-code: version of the package 
 #
-#    For example: ./build-s3-dist.sh template-bucket source-bucket-base-name my-solution v2.3.1
+#    For example: ./build-s3-dist.sh template-bucket source-bucket-base-name my-solution v3.0
 #    The template will then expect the source code to be located in the solutions-[region_name] bucket 
 # 
 # Check to see if input has been provided: 
 if [ -z "$1" ] || [ -z "$2" ] || [ -z "$3" ] || [ -z "$4" ]; then 
     echo "Please provide the base template-bucket, source-bucket-base-name, trademark-approved-solution-name and version" 
-    echo "For example: ./build-s3-dist.sh solutions solutions-code trademarked-solution-name v2.3.1" 
+    echo "For example: ./build-s3-dist.sh solutions solutions-code trademarked-solution-name v3.0" 
     exit 1 
 fi 
 
@@ -36,7 +36,7 @@ template_dist_dir="$template_dir/global-s3-assets"
 build_dist_dir="$template_dir/regional-s3-assets" 
 
 echo "------------------------------------------------------------------------------"
-echo "[Init] Clean old dist and node_modules folders"
+echo "[Init] Clean old dist folders"
 echo "------------------------------------------------------------------------------"
 
 echo "rm -rf $template_dist_dir" 
@@ -49,8 +49,6 @@ rm -rf $build_dist_dir
 echo "mkdir -p $build_dist_dir" 
 mkdir -p $build_dist_dir 
 
-echo "find $source_dir -iname \"node_modules\" -type d -exec rm -r \"{}\" \; 2> /dev/null"
-find "$source_dir" -iname "node_modules" -type d -exec rm -r "{}" \; 2> /dev/null
 echo "find $source_dir -iname \"dist\" -type d -exec rm -r \"{}\" \; 2> /dev/null"
 find "$source_dir" -iname "dist" -type d -exec rm -r "{}" \; 2> /dev/null
 echo "find ../ -type f -name 'package-lock.json' -delete"
@@ -76,46 +74,54 @@ do
   sed -e $SUB1 -e $SUB2 -e $SUB3 -e $SUB4 $template_dir/$TEMPLATE > $template_dist_dir/$TEMPLATE
 done
 
+
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Log Parser"
 echo "------------------------------------------------------------------------------"
-cd "$source_dir"/log-parser || exit 1
+cd "$source_dir"/log_parser || exit 1
 pip install -r requirements.txt --target ./package
-cd "$source_dir"/log-parser/package || exit 1
-zip -q -r9 "$build_dist_dir"/log-parser.zip .
-cd "$source_dir"/log-parser || exit 1
-zip -g "$build_dist_dir"/log-parser.zip log-parser.py
-zip -d "$build_dist_dir"/log-parser.zip 'LICENSE' 'README.*'
+cd "$source_dir"/log_parser/package || exit 1
+zip -q -r9 "$build_dist_dir"/log_parser.zip .
+cd "$source_dir"/log_parser || exit 1
+cp -r "$source_dir"/lib .
+zip -g -r "$build_dist_dir"/log_parser.zip log-parser.py partition_s3_logs.py add_athena_partitions.py build_athena_queries.py lib
+
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Access Handler"
 echo "------------------------------------------------------------------------------"
-cd "$source_dir"/access-handler || exit 1
+cd "$source_dir"/access_handler || exit 1
 pip install -r requirements.txt --target ./package
-cd "$source_dir"/access-handler/package || exit 1
-zip -q -r9 "$build_dist_dir"/access-handler.zip .
-cd "$source_dir"/access-handler || exit 1
-zip -g "$build_dist_dir"/access-handler.zip access-handler.py
-zip -d "$build_dist_dir"/access-handler.zip 'LICENSE' 'README.*'
+cd "$source_dir"/access_handler/package || exit 1
+zip -q -r9 "$build_dist_dir"/access_handler.zip .
+cd "$source_dir"/access_handler || exit 1
+cp -r "$source_dir"/lib .
+zip -g -r "$build_dist_dir"/access_handler.zip access-handler.py lib
+
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] IP Lists Parser"
 echo "------------------------------------------------------------------------------"
-cd "$source_dir"/reputation-lists-parser || exit 1
-npm install --production
-zip -q -r9 "$build_dist_dir"/reputation-lists-parser.zip ./*
-zip -d "$build_dist_dir"/reputation-lists-parser.zip '*.spec.js' '*_test.js'
+cd "$source_dir"/reputation_lists_parser || exit 1
+pip install -r requirements.txt --target ./package
+cd "$source_dir"/reputation_lists_parser/package || exit 1
+zip -q -r9 "$build_dist_dir"/reputation_lists_parser.zip .
+cd "$source_dir"/reputation_lists_parser || exit 1
+cp -r "$source_dir"/lib .
+zip -g -r "$build_dist_dir"/reputation_lists_parser.zip reputation-lists.py lib
+
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Custom Resource"
 echo "------------------------------------------------------------------------------"
-cd "$source_dir"/custom-resource || exit 1
+cd "$source_dir"/custom_resource || exit 1
 pip install -r requirements.txt --target ./package
-cd "$source_dir"/custom-resource/package || exit 1
-zip -q -r9 "$build_dist_dir"/custom-resource.zip .
-cd "$source_dir"/custom-resource || exit 1
-zip -g "$build_dist_dir"/custom-resource.zip custom-resource.py
-zip -d "$build_dist_dir"/custom-resource.zip 'LICENSE' 'README.*'
+cd "$source_dir"/custom_resource/package || exit 1
+zip -q -r9 "$build_dist_dir"/custom_resource.zip .
+cd "$source_dir"/custom_resource || exit 1
+cp -r "$source_dir"/lib .
+zip -g -r "$build_dist_dir"/custom_resource.zip custom-resource.py lib
+
 
 echo "------------------------------------------------------------------------------"
 echo "[Packing] Helper"
@@ -125,4 +131,17 @@ pip install -r requirements.txt --target ./package
 cd "$source_dir"/helper/package || exit 1
 zip -q -r9 "$build_dist_dir"/helper.zip ./*
 cd "$source_dir"/helper || exit 1
-zip -g "$build_dist_dir"/helper.zip helper.py
+cp -r "$source_dir"/lib .
+zip -g -r "$build_dist_dir"/helper.zip helper.py lib
+
+
+echo "------------------------------------------------------------------------------"
+echo "[Packing] Timer"
+echo "------------------------------------------------------------------------------"
+cd "$source_dir"/timer || exit 1
+pip install -r requirements.txt --target ./package
+cd "$source_dir"/timer/package || exit 1
+zip -q -r9 "$build_dist_dir"/timer.zip ./*
+cd "$source_dir"/timer || exit 1
+cp -r "$source_dir"/lib .
+zip -g -r "$build_dist_dir"/timer.zip timer.py lib

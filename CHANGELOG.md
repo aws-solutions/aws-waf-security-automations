@@ -14,3 +14,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fixed README file to accurately reflect script params
 - Upgraded from Python 3.7 to 3.8
 - Changed RequestThreshold min limit from 2000 to 100
+## [2.3.3] - 2020-06-15
+### Added
+- Implemented Athena optimization: added partitioning for CloudFront, ALB and WAF logs and Athena queries
+### Changed
+- Fixed potential DoS vector within Bad Bots X-Forward-For header
+## [3.0] - 2020-07-08
+### Added
+- Added an option to deploy AWS Managed Rules for WebACL on installation
+### Changed
+- Upgraded from WAF classic to WAFV2 API
+- Eliminated dependency on NodeJS and use Python as the standardized programming language
+## [3.1] - 2020-10-22
+### Changed
+- Replaced s3 path-style with virtual-hosted style
+- Added partition variable to all ARNs 
+- Updated bug report

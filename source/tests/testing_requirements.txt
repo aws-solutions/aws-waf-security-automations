@@ -1,0 +1,10 @@
+botocore>=1.12.99
+boto3>=1.9.99
+mock>=2.0.0
+moto>=1.3.8
+pytest>=4.4.1
+pytest-mock>=1.10.4
+pytest-runner>=2.11.1
+uuid>=1.30
+backoff>=1.8.0
+freezegun>=0.3.15

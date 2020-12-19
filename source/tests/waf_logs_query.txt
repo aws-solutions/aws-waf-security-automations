@@ -1,0 +1,32 @@
+SELECT
+	client_ip,
+	MAX_BY(counter, counter) as max_counter_per_min
+ FROM (
+	WITH logs_with_concat_data AS (
+		SELECT
+			httprequest.clientip as client_ip,
+			from_unixtime(timestamp/1000) as datetime
+		FROM
+			testdb.testtable
+		WHERE year = 2020
+		AND month = 05
+		AND day = 07
+		AND hour between 09 and 13
+	)
+	SELECT
+		client_ip,
+		COUNT(*) as counter
+	FROM
+		logs_with_concat_data
+	WHERE
+		datetime > TIMESTAMP '2020-05-07 09:33:00'
+	GROUP BY
+		client_ip,
+		date_trunc('minute', datetime)
+	HAVING
+		COUNT(*) >= 10.0
+) GROUP BY
+	client_ip
+ORDER BY
+	max_counter_per_min DESC
+LIMIT 10000;
