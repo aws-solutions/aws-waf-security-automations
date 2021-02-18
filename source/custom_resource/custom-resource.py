@@ -131,6 +131,9 @@ def add_lifecycle_policy_to_s3_bucket(log, bucket_name, expiry_after_days):
                                     'Days': expiry_after_days,
                                     'ExpiredObjectDeleteMarker': True
                                 },
+                                'Filter': {
+                                    'Prefix': '*.gz'
+                                },
                                 'Status': 'Enabled',
                                 'NoncurrentVersionExpiration': {
                                     'NoncurrentDays': expiry_after_days
