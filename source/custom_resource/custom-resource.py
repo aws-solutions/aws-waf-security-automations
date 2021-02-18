@@ -42,7 +42,7 @@ logging.getLogger().debug('Loading function')
 #
 # All those requirements are pre-verified by helper function.
 # ----------------------------------------------------------------------------------------------------------------------
-def configure_s3_bucket(log, region, bucket_name):
+def configure_s3_bucket(log, region, bucket_name, expiry_after_days):
     log.info("[configure_s3_bucket] Start")
 
     if bucket_name.strip() == "":
@@ -98,7 +98,57 @@ def configure_s3_bucket(log, region, bucket_name):
                 }
             )
             log.info("[configure_s3_bucket]response put_public_access_block: \n%s" % response)
+
+            # add lifecycle policy to automatically expire objects, if enabled
+            add_lifecycle_policy_to_s3_bucket(log, bucket_name, expiry_after_days)
+
     log.info("[configure_s3_bucket] End")
+
+
+# ======================================================================================================================
+# Add Lifecycle Policy to Access Log Bucket
+# ======================================================================================================================
+# ----------------------------------------------------------------------------------------------------------------------
+# If automatic log expiry is enabled, update bucket (if it exists) with an S3 lifecycle policy
+# ----------------------------------------------------------------------------------------------------------------------
+def add_lifecycle_policy_to_s3_bucket(log, bucket_name, expiry_after_days):
+    log.info("[add_lifecycle_policy_to_s3_bucket] Start")
+
+    if bucket_name.strip() == "":
+        raise Exception('Failed to configure access log bucket. Name cannot be empty!')
+
+    s3_client = boto3.client('s3')
+
+    try:
+        # add lifecycle policy to automatically expire objects, if enabled
+            if (expiry_after_days.isnumeric() and expiry_after_days > 0):
+                response = s3_client.put_bucket_lifecycle_configuration(
+                    Bucket=bucket_name,
+                    LifecycleConfiguration={
+                        'Rules': [
+                            {
+                                'Expiration': {
+                                    'Days': expiry_after_days,
+                                    'ExpiredObjectDeleteMarker': True
+                                },
+                                'Status': 'Enabled',
+                                'NoncurrentVersionExpiration': {
+                                    'NoncurrentDays': expiry_after_days
+                                },
+                                'AbortIncompleteMultipartUpload': {
+                                    'DaysAfterInitiation': expiry_after_days
+                                }
+                            }
+                        ]
+                    }
+                )
+                log.info("[add_lifecycle_policy_to_s3_bucket]response put_bucket_lifecycle_configuration: \n%s" % response)
+            else:
+                log.info("Bucket will not be configured with any lifecycle policies. Automatic expiry of objects not enabled")
+    except botocore.exceptions.ClientError as e:
+        log.error("[add_lifecycle_policy_to_s3_bucket]response put_bucket_lifecycle_configuration: \n%s" % e.response)
+
+    log.info("[add_lifecycle_policy_to_s3_bucket] End")
 
 
 # ----------------------------------------------------------------------------------------------------------------------
@@ -483,7 +533,8 @@ def lambda_handler(event, context):
 
             if 'CREATE' in request_type:
                 configure_s3_bucket(log, event['ResourceProperties']['Region'],
-                                    event['ResourceProperties']['AppAccessLogBucket'])
+                                    event['ResourceProperties']['AppAccessLogBucket'],
+                                    event['ResourceProperties']['AccessLogExpiryAfterDays'])
                 add_s3_bucket_lambda_event(log, event['ResourceProperties']['AppAccessLogBucket'],
                                            lambda_log_parser_function,
                                            lambda_partition_s3_logs_function,
@@ -500,6 +551,10 @@ def lambda_handler(event, context):
                                                 'ScannersProbesLambdaLogParser'] == 'yes' else False
                 old_athena_parser = True if event['OldResourceProperties'][
                                                 'ScannersProbesAthenaLogParser'] == 'yes' else False
+
+                if (event['OldResourceProperties']['AccessLogExpiryAfterDays'] != event['ResourceProperties']['AccessLogExpiryAfterDays']):
+                    add_lifecycle_policy_to_s3_bucket(log,  event['ResourceProperties']['AppAccessLogBucket'],
+                        event['ResourceProperties']['AccessLogExpiryAfterDays'])
 
                 if (event['OldResourceProperties']['AppAccessLogBucket'] != event['ResourceProperties'][
                     'AppAccessLogBucket'] or

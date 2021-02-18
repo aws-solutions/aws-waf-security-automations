@@ -40,6 +40,7 @@ Metadata:
         Parameters:
           - EndpointType
           - AppAccessLogBucket
+          - AccessLogExpiryAfterDays
 
       - Label:
           default: Advanced Settings
@@ -76,6 +77,9 @@ Metadata:
 
       AppAccessLogBucket:
         default: Application Access Log Bucket Name
+      
+      AccessLogExpiryAfterDays:
+        default: Number Of Days Before Application Access Logs Are Deleted Automatically
 
       ErrorThreshold:
         default: Error Threshold
@@ -167,7 +171,18 @@ Parameters:
       If you chose yes for the Activate Scanners & Probes Protection parameter, enter a name for the 
       Amazon S3 bucket where you want to store access logs for your CloudFront distribution or Application 
       Load Balancer. More about bucket name restriction here: http://amzn.to/1p1YlU5. 
-      If you chose to deactivate this protection, ignore this parameter. 
+      If you chose to deactivate this protection, ignore this parameter.
+
+  AccessLogExpiryAfterDays:
+    Type: Number
+    Default: 0
+    MinValue: 0
+    Description: >-
+      If you chose yes for the Activate Scanners & Probes Protection parameter, enter the number of days before Cloudfront or Load Balancer 
+      logs in the Amazon S3 Bucket get DELETED (expired).
+      If you do not want the logs to be deleted automatically, set this parameter to 0.
+      If you chose to deactivate this protection, ignore this parameter.
+      Read more about Amazon S3 Lifecycle Policies here: https://amz.run/4K0A
 
   ErrorThreshold:
     Type: Number
@@ -1588,6 +1603,7 @@ Resources:
       ServiceToken: !GetAtt CustomResource.Arn
       Region: !Ref 'AWS::Region'
       AppAccessLogBucket: !Ref AppAccessLogBucket
+      AccessLogExpiryAfterDays: !Ref AccessLogExpiryAfterDays
       LogParser: !If [LogParser, !GetAtt LogParser.Arn, !Ref 'AWS::NoValue']
       ScannersProbesLambdaLogParser: !If [ScannersProbesLambdaLogParser, 'yes', 'no']
       ScannersProbesAthenaLogParser: !If [ScannersProbesAthenaLogParser, 'yes', 'no']
