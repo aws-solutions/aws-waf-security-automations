@@ -92,12 +92,18 @@ class WAFLIBv2(object):
             log.error(str(e))
             return None
 
+    def fatal_code(e):
+        log.error("Giving up after %s times",str(API_CALL_NUM_RETRIES))
+        log.error(e)
+
+
     # Update addresses in an IPSet
     @on_exception(expo,
-                  (client.exceptions.WAFInternalErrorException,
-                   client.exceptions.WAFOptimisticLockException,
-                   client.exceptions.WAFLimitsExceededException),
-                  max_time=MAX_TIME)
+                  client.exceptions.WAFOptimisticLockException,
+                  max_time=MAX_TIME,
+                  jitter=backoff.full_jitter,
+                  max_tries=API_CALL_NUM_RETRIES,
+                  giveup=fatal_code)
     def update_ip_set(self, log, scope, name, ip_set_arn, addresses):
         log.info("[waflib:update_ip_set] Start")
         if (ip_set_arn is None or name is None):
