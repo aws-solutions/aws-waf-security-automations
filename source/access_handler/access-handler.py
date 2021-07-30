@@ -200,9 +200,8 @@ def lambda_handler(event, context):
         ipset_arn_v4 = os.getenv('IP_SET_ID_BAD_BOTV4')
         ipset_arn_v6 = os.getenv('IP_SET_ID_BAD_BOTV6')
 
-        # Fixed as old line had security exposure based on user supplied IP address
         log.info("Event->%s<-", str(event))
-        source_ip = str(event['requestContext']['identity']['sourceIp'])
+        source_ip = str(event['headers']['True-Client-Ip'])
 
         log.info("scope = %s", scope)
         log.info("ipset_name_v4 = %s", ipset_name_v4)

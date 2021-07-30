@@ -1357,6 +1357,22 @@ Resources:
       Principal: events.amazonaws.com
       SourceArn: !GetAtt ReputationListsParserEventsRule.Arn
 
+  InjectTrueClientIP:
+    Type: AWS::CloudFront::Function
+    Properties:
+      Name: InjectTrueClientIP
+      AutoPublish: True
+      FunctionConfig:
+        Comment: Injects the True-Client-Ip header to all requests.
+        Runtime: cloudfront-js-1.0
+      FunctionCode: |-
+        function handler(event) {
+            var request = event.request;
+            var clientIP = event.viewer.ip;
+            request.headers['True-Client-Ip'] = { value: clientIP };
+            return request;
+        }
+
   BadBotParser:
     Type: 'AWS::Lambda::Function'
     Condition: BadBotProtectionActivated
@@ -1432,7 +1448,7 @@ Resources:
       HttpMethod: ANY
       AuthorizationType: NONE
       RequestParameters:
-        method.request.header.X-Forwarded-For: false
+        method.request.header.True-Client-Ip: false
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
@@ -1454,7 +1470,7 @@ Resources:
       HttpMethod: ANY
       AuthorizationType: NONE
       RequestParameters:
-        method.request.header.X-Forwarded-For: false
+        method.request.header.True-Client-Ip: false
       Integration:
         Type: AWS_PROXY
         IntegrationHttpMethod: POST
@@ -1721,6 +1737,10 @@ Resources:
               RegionProperties: !If [AlbEndpoint, !Sub '${AWS::Region}', 'us-east-1']
 
 Outputs:
+  InjectTrueClientIPArn:
+    Description: CloudFront Function ARN to inject True-Client-Ip header
+    Value: !GetAtt InjectTrueClientIP.FunctionARN
+
   BadBotHoneypotEndpoint:
     Description: Bad Bot Honeypot Endpoint
     Value: !Sub 'https://${ApiGatewayBadBot}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayBadBotStage}'
