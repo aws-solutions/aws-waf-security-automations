@@ -61,8 +61,8 @@ chmod +x ./build-s3-dist.sh && ./build-s3-dist.sh $TEMPLATE_OUTPUT_BUCKET $DIST_
 ```
 #### 06. Upload deployment assets to your Amazon S3 buckets:
 ```
-aws s3 cp ./deployment/global-s3-assets s3://$TEMPLATE_OUTPUT_BUCKET/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
-aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
+aws s3 cp ./deployment/global-s3-assets s3://$TEMPLATE_OUTPUT_BUCKET/$SOLUTION_NAME/$VERSION --recursive --acl bucket-owner-full-control
+aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/$SOLUTION_NAME/$VERSION --recursive --acl bucket-owner-full-control
 ```
 #### _Note:_ You must use proper acl and profile for the copy operation as applicable.
 
