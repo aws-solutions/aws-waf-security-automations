@@ -17,7 +17,10 @@ import os
 import requests
 from json import dumps
 from datetime import datetime
+import logging
 
+log = logging.getLogger(__name__)
+log.setLevel('INFO')
 
 def send_metrics(data,
                  uuid=os.getenv('UUID'),
@@ -45,5 +48,6 @@ def send_metrics(data,
         headers = {'content-type': 'application/json'}
         response = requests.post(url, data=json_data, headers=headers)
         return response
-    except:
-        pass
+    except Exception as e:
+        log.error("[solution_metrics:send_metrics] Failed to send solution metrics.")
+        log.error(str(e))

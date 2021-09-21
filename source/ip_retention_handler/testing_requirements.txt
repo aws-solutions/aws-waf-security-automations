@@ -8,3 +8,5 @@ pytest-runner>=2.11.1
 uuid>=1.30
 backoff>=1.8.0
 freezegun>=0.3.15
+pytest-cov
+pytest-env

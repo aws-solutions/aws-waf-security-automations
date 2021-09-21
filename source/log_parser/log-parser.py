@@ -19,6 +19,8 @@ import logging
 import datetime
 import os
 from os import environ, remove
+from botocore.config import Config
+from time import sleep
 from urllib.parse import unquote_plus
 from urllib.parse import urlparse
 import requests
@@ -27,12 +29,13 @@ from lib.waflibv2 import WAFLIBv2
 from lib.solution_metrics import send_metrics
 from build_athena_queries import build_athena_query_for_app_access_logs, \
     build_athena_query_for_waf_logs
+from lib.boto3_util import create_client, create_resource
 
 logging.getLogger().debug('Loading function')
 
 api_call_num_retries = 5
 max_descriptors_per_ip_set_update = 500
-delay_between_updates = 2
+delay_between_updates = 5
 scope = os.getenv('SCOPE')
 scanners = 1
 flood = 2
@@ -140,6 +143,10 @@ def update_ip_set(log, ip_set_type, outstanding_requesters):
         log.info("[update_ip_set] \tCommit changes in WAF IP set")
         # --------------------------------------------------------------------------------------------------------------
         response = waflib.update_ip_set(log, scope, ipset_name_v4, ipset_arn_v4, addresses_v4)
+        
+        # Sleep for a few seconds to mitigate AWS WAF Update API call throttling issue
+        sleep(delay_between_updates)
+        
         response = waflib.update_ip_set(log, scope, ipset_name_v6, ipset_arn_v6, addresses_v6)
 
     except Exception as error:
@@ -157,7 +164,7 @@ def send_anonymous_usage_data(log):
 
         log.info("[send_anonymous_usage_data] Start")
 
-        cw = boto3.client('cloudwatch')
+        cw = create_client('cloudwatch')
         usage_data = {
                     "data_type": "log_parser",
                     "scanners_probes_set_size": 0,
@@ -456,7 +463,7 @@ def process_athena_scheduler_event(log, event):
 def execute_athena_query(log, log_type, event):
     log.debug('[execute_athena_query] Start')
 
-    athena_client = boto3.client('athena')
+    athena_client = create_client('athena')
     s3_output = "s3://%s/athena_results/" % event['accessLogBucket']
     database_name = event['glueAccessLogsDatabase']
 
@@ -506,7 +513,7 @@ def process_athena_result(log, bucket_name, key_name, ip_set_type):
         log.info("[process_athena_result] \tDownload file from S3")
         # --------------------------------------------------------------------------------------------------------------
         local_file_path = '/tmp/' + key_name.split('/')[-1]
-        s3 = boto3.client('s3')
+        s3 = create_client('s3')
         s3.download_file(bucket_name, key_name, local_file_path)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -546,8 +553,8 @@ def load_configurations(log, bucket_name, key_name):
     log.debug('[load_configurations] Start')
 
     try:
-        s3 = boto3.resource('s3')
-        file_obj = s3.Object(bucket_name, key_name)
+        s3_resource = create_resource('s3')
+        file_obj = s3_resource.Object(bucket_name, key_name)
         file_content = file_obj.get()['Body'].read()
 
         global config
@@ -577,12 +584,13 @@ def get_outstanding_requesters(log, bucket_name, key_name, log_type):
         log.info("[get_outstanding_requesters] \tDownload file from S3")
         # --------------------------------------------------------------------------------------------------------------
         local_file_path = '/tmp/' + key_name.split('/')[-1]
-        s3 = boto3.client('s3')
+        s3 = create_client('s3')
         s3.download_file(bucket_name, key_name, local_file_path)
 
         # --------------------------------------------------------------------------------------------------------------
         log.info("[get_outstanding_requesters] \tRead file content")
         # --------------------------------------------------------------------------------------------------------------
+        error_count = 0
         with gzip.open(local_file_path, 'r') as content:
             for line in content:
                 try:
@@ -620,7 +628,7 @@ def get_outstanding_requesters(log, bucket_name, key_name, log_type):
                         request_key += ' ' + line_data[LINE_FORMAT_CLOUD_FRONT['time']][:-3]
                         request_key += ' ' + line_data[LINE_FORMAT_CLOUD_FRONT['source_ip']]
                         return_code_index = LINE_FORMAT_CLOUD_FRONT['code']
-                        uri = urlparse(line_data[LINE_FORMAT_ALB['uri']]).path
+                        uri = urlparse(line_data[LINE_FORMAT_CLOUD_FRONT['uri']]).path
 
                     else:
                         return outstanding_requesters
@@ -647,7 +655,11 @@ def get_outstanding_requesters(log, bucket_name, key_name, log_type):
                                 counter['uriList'][uri][request_key] = 1
 
                 except Exception as e:
+                    error_count += 1
                     log.error("[get_outstanding_requesters] \t\tError to process line: %s" % line)
+                    log.error(str(e))
+                    if error_count == 5:  #Allow 5 errors before stopping the function execution
+                        raise
         remove(local_file_path)
 
         # --------------------------------------------------------------------------------------------------------------
@@ -700,7 +712,7 @@ def merge_outstanding_requesters(log, bucket_name, key_name, log_type, output_ke
 
     force_update = False
     need_update = False
-    s3 = boto3.client('s3')
+    s3 = create_client('s3')
 
     # --------------------------------------------------------------------------------------------------------------
     log.info("[merge_outstanding_requesters] \tCalculate Last Update Age")
@@ -848,7 +860,7 @@ def write_output(log, bucket_name, key_name, output_key_name, outstanding_reques
         with open(current_data, 'w') as outfile:
             json.dump(outstanding_requesters, outfile)
 
-        s3 = boto3.client('s3')
+        s3 = create_client('s3')
         s3.upload_file(current_data, bucket_name, output_key_name, ExtraArgs={'ContentType': "application/json"})
         remove(current_data)
 
@@ -961,6 +973,7 @@ def lambda_handler(event, context):
 
     except Exception as error:
         log.error(str(error))
+        raise
 
     log.info('[lambda_handler] End')
     return result

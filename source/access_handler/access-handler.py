@@ -28,6 +28,7 @@ from botocore.config import Config
 
 from lib.waflibv2 import WAFLIBv2
 from lib.solution_metrics import send_metrics
+from lib.boto3_util import create_client
 
 waflib = WAFLIBv2()
 
@@ -40,7 +41,7 @@ def send_anonymous_usage_data(log, scope, ipset_name_v4, ipset_arn_v4, ipset_nam
         log.info("[send_anonymous_usage_data] Start")
         metric_prefix = os.getenv('METRIC_NAME_PREFIX')
 
-        cw = boto3.client('cloudwatch')
+        cw = create_client('cloudwatch')
         usage_data = {
             "data_type": "bad_bot",
             "bad_bot_ip_set_size": 0,
@@ -202,7 +203,10 @@ def lambda_handler(event, context):
 
         # Fixed as old line had security exposure based on user supplied IP address
         log.info("Event->%s<-", str(event))
-        source_ip = str(event['requestContext']['identity']['sourceIp'])
+        if event['requestContext']['identity']['userAgent'] == 'Amazon CloudFront':
+            source_ip = str(event['headers']['X-Forwarded-For'].split(',')[0].strip())
+        else:
+            source_ip = str(event['requestContext']['identity']['sourceIp'])
 
         log.info("scope = %s", scope)
         log.info("ipset_name_v4 = %s", ipset_name_v4)

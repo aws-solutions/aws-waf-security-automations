@@ -18,7 +18,8 @@ import boto3
 import re
 import logging
 from os import environ
-
+from botocore.config import Config
+from lib.boto3_util import create_client
 
 def lambda_handler(event, context):
     """
@@ -53,7 +54,7 @@ def lambda_handler(event, context):
         logging.getLogger().info("\n[partition_s3_logs lambda_handler] KEEP ORIGINAL DATA: %s; End POINT: %s."
                                  %(keep_original_data, endpoint))
 
-        s3 = boto3.client('s3')
+        s3 = create_client('s3')
 
         count = 0
         

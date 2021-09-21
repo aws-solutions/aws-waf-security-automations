@@ -10,17 +10,17 @@
 #  OR CONDITIONS OF ANY KIND, express or implied. See the License for the specific language governing permissions    #
 #  and limitations under the License.                                                                                #
 ######################################################################################################################
-import os
-import boto3
-import logging
-from botocore.config import Config
+# import boto3
+# from botocore.config import Config
+from botocore.exceptions import ClientError
 from ipaddress import ip_address
-import sys
-from backoff import on_exception, expo
+from backoff import on_exception, expo, full_jitter
+from lib.boto3_util import create_client
 
 API_CALL_NUM_RETRIES = 5
-MAX_TIME = 10
-client = boto3.client('wafv2', config=Config(retries={'max_attempts': API_CALL_NUM_RETRIES}))
+MAX_TIME = 20
+
+client = create_client('wafv2')
 
 class WAFLIBv2(object):
 
@@ -62,7 +62,24 @@ class WAFLIBv2(object):
         ip_class = "32" if ip_type == "IPV4" else "128"
         return str(source_ip)+"/"+str(ip_class)
 
-    # Retrieve IPSet based on ip_set_id
+    # Retrieve IPSet given an ip_set_id
+    def get_ip_set_by_id(self, log, scope, name, ip_set_id):
+        try:
+            log.debug("[waflib:get_ip_set_by_id] Start")
+            response = client.get_ip_set(
+                Scope=scope,
+                Name=name,
+                Id=ip_set_id
+            )
+            log.debug("[waflib:get_ip_set_by_id] got ip set: \n{}.".format(response))
+            log.debug("[waflib:get_ip_set_by_id] End")
+            return response
+        except Exception as e:
+            log.error("[waflib:get_ip_set_by_id] Failed to get IPSet %s", str(ip_set_id))
+            log.error(str(e))
+            return None
+            
+    # Retrieve IPSet given an ip set arn
     @on_exception(expo, client.exceptions.WAFInternalErrorException, max_time=MAX_TIME)
     def get_ip_set(self, log, scope, name, arn):
         try:
@@ -92,12 +109,56 @@ class WAFLIBv2(object):
             log.error(str(e))
             return None
 
-    # Update addresses in an IPSet
-    @on_exception(expo,
-                  (client.exceptions.WAFInternalErrorException,
-                   client.exceptions.WAFOptimisticLockException,
-                   client.exceptions.WAFLimitsExceededException),
-                  max_time=MAX_TIME)
+    # Update addresses in an IPSet using ip set id
+    @on_exception(expo, client.exceptions.WAFOptimisticLockException,
+              max_time=MAX_TIME,
+              jitter=full_jitter,
+              max_tries=API_CALL_NUM_RETRIES)
+    def update_ip_set_by_id(self, log, scope, name, ip_set_id, addresses, lock_token, description):
+        log.debug("[waflib:update_ip_set_by_id] Start")
+
+        try:
+            response = client.update_ip_set(
+                Scope=scope,
+                Name=name,
+                Id=ip_set_id,
+                Addresses=addresses,
+                LockToken=lock_token,
+                Description=description
+            )
+
+            log.debug("[waflib:update_ip_set_by_id] update ip set response: \n{}.".format(response))
+            log.debug("[waflib:update_ip_set_by_id] End")
+            return response
+        # Get the latest ip set and retry updating api call when OptimisticLockException occurs
+        except ClientError as ex:
+            exception_type = ex.response['Error']['Code']
+            if exception_type in ['OptimisticLockException']:
+                log.info("[waflib:update_ip_set_by_id] OptimisticLockException detected. Get the latest ip set and retry updating ip set.")
+                ip_set = self.get_ip_set_by_id(log, scope, name, ip_set_id)
+                lock_token = ip_set['LockToken']
+
+                response = client.update_ip_set(
+                    Scope=scope,
+                    Name=name,
+                    Id=ip_set_id,
+                    Addresses=addresses,
+                    LockToken=lock_token,
+                    Description=description
+                )
+                log.debug("[waflib:update_ip_set_id] End")
+                return response
+        except Exception as e:
+            log.error(e)
+            log.error("[waflib:update_ip_set_by_id] Failed to update IPSet: %s", str(ip_set_id))
+            return None
+
+            
+    # Update addresses in an IPSet using ip set arn
+    @on_exception(expo, client.exceptions.WAFOptimisticLockException,
+            max_time=MAX_TIME,
+            jitter=full_jitter,
+            max_tries=API_CALL_NUM_RETRIES)
     def update_ip_set(self, log, scope, name, ip_set_arn, addresses):
         log.info("[waflib:update_ip_set] Start")
         if (ip_set_arn is None or name is None):
@@ -112,7 +173,7 @@ class WAFLIBv2(object):
             ip_set = self.get_ip_set(log, scope, name, ip_set_arn)
             lock_token = ip_set['LockToken']
             description = ip_set['IPSet']['Description']
-            log.info("Updating IPSet with description: %s", str(description))
+            log.info("Updating IPSet with description: %s, lock token: %s", str(description), str(lock_token))
 
             response = client.update_ip_set(
                 Scope=scope,
@@ -124,6 +185,8 @@ class WAFLIBv2(object):
             )
 
             new_ip_set = self.get_ip_set(log, scope, name, ip_set_id)
+
+            log.debug("[waflib:update_ip_set] update ip set response:\n{}".format(response))
             log.info("[waflib:update_ip_set] End")
             return new_ip_set
         except Exception as e:
@@ -174,7 +237,11 @@ class WAFLIBv2(object):
             log.error(str(e))
             return None
             
-
+    # log when retry is stopped
+    # def give_up_retry(self, log, e):
+    #     log.error("Giving up retry after %s times.",str(API_CALL_NUM_RETRIES))
+    #     log.error(e)
+        
     #################################################################
     # Following functions only used for testing, not in WAF Solution
     #################################################################

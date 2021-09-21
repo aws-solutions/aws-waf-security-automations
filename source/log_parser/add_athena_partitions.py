@@ -18,7 +18,8 @@ import boto3
 import re
 import logging
 from os import environ
-
+from botocore.config import Config
+from lib.boto3_util import create_client
 
 def lambda_handler(event, context):
     """
@@ -41,7 +42,7 @@ def lambda_handler(event, context):
         # ----------------------------------------------------------
         log.info(event)
 
-        athena_client = boto3.client('athena')
+        athena_client = create_client('athena')
         database_name = event['glueAccessLogsDatabase']
         access_log_bucket = event['accessLogBucket']
         waf_log_bucket = event['wafLogBucket']

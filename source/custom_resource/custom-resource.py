@@ -19,8 +19,11 @@ import datetime
 import requests
 import os
 import time
+from os import environ
+from botocore.config import Config
 from lib.waflibv2 import WAFLIBv2
 from lib.solution_metrics import send_metrics
+from lib.boto3_util import create_client, create_resource
 
 waflib = WAFLIBv2()
 
@@ -42,7 +45,7 @@ logging.getLogger().debug('Loading function')
 #
 # All those requirements are pre-verified by helper function.
 # ----------------------------------------------------------------------------------------------------------------------
-def configure_s3_bucket(log, region, bucket_name):
+def configure_s3_bucket(log, region, bucket_name, access_logging_bucket_name):
     log.info("[configure_s3_bucket] Start")
 
     if bucket_name.strip() == "":
@@ -51,11 +54,14 @@ def configure_s3_bucket(log, region, bucket_name):
     # ------------------------------------------------------------------------------------------------------------------
     # Create the S3 bucket (if not exist)
     # ------------------------------------------------------------------------------------------------------------------
-    s3_client = boto3.client('s3')
+    s3_client = create_client('s3')
 
     try:
         response = s3_client.head_bucket(Bucket=bucket_name)
         log.info("[configure_s3_bucket]response head_bucket: \n%s" % response)
+
+        # Enable access logging if needed
+        put_s3_bucket_access_logging(log, s3_client, bucket_name, access_logging_bucket_name)
     except botocore.exceptions.ClientError as e:
         # If a client error is thrown, then check that it was a 404 error.
         # If it was a 404 error, then the bucket does not exist.
@@ -98,8 +104,33 @@ def configure_s3_bucket(log, region, bucket_name):
                 }
             )
             log.info("[configure_s3_bucket]response put_public_access_block: \n%s" % response)
+
+            # Enable access logging
+            put_s3_bucket_access_logging(log, s3_client, bucket_name, access_logging_bucket_name)
+
     log.info("[configure_s3_bucket] End")
 
+# ----------------------------------------------------------------------------------------------------------------------
+# Enable access logging on the App access log bucket
+# ----------------------------------------------------------------------------------------------------------------------
+def put_s3_bucket_access_logging(log, s3_client, bucket_name, access_logging_bucket_name):
+    log.info("[put_s3_bucket_access_logging] Start") 
+
+    response = s3_client.get_bucket_logging(Bucket = bucket_name)
+
+    # Enable access logging if not already exists
+    if response.get('LoggingEnabled') is None:
+        response = s3_client.put_bucket_logging(
+            Bucket=bucket_name,
+            BucketLoggingStatus={
+                'LoggingEnabled': {
+                    'TargetBucket': access_logging_bucket_name,
+                    'TargetPrefix': 'AppAccess_Logs'
+                }
+            }
+        )
+        log.info("[put_s3_bucket_access_logging]put_bucket_logging response: \n%s" % response)
+    log.info("[put_s3_bucket_access_logging] End")   
 
 # ----------------------------------------------------------------------------------------------------------------------
 # Configure bucket event to call Log Parser whenever a new gz log or athena result file is added to the bucket;
@@ -110,7 +141,7 @@ def add_s3_bucket_lambda_event(log, bucket_name, lambda_function_arn, lambda_log
     log.info("[add_s3_bucket_lambda_event] Start")
     
     try:
-        s3_client = boto3.client('s3')
+        s3_client = create_client('s3')
         if lambda_function_arn is not None and (lambda_parser or athena_parser):
             notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
 
@@ -169,7 +200,7 @@ def remove_s3_bucket_lambda_event(log, bucket_name, lambda_function_arn, lambda_
     if lambda_function_arn != None:
         log.info("[remove_s3_bucket_lambda_event] Start")
 
-        s3_client = boto3.client('s3')
+        s3_client = create_client('s3')
         try:
             new_conf = {}
             notification_conf = s3_client.get_bucket_notification_configuration(Bucket=bucket_name)
@@ -267,8 +298,8 @@ def generate_app_log_parser_conf_file(log, stack_name, error_threshold, block_pe
 
     if not overwrite:
         try:
-            s3 = boto3.resource('s3')
-            file_obj = s3.Object(app_access_log_bucket, remote_file)
+            s3_resource = create_resource('s3')
+            file_obj = s3_resource.Object(app_access_log_bucket, remote_file)
             file_content = file_obj.get()['Body'].read()
             remote_conf = json.loads(file_content)
 
@@ -285,7 +316,7 @@ def generate_app_log_parser_conf_file(log, stack_name, error_threshold, block_pe
     with open(local_file, 'w') as outfile:
         json.dump(default_conf, outfile)
 
-    s3_client = boto3.client('s3')
+    s3_client = create_client('s3')
     s3_client.upload_file(local_file, app_access_log_bucket, remote_file, ExtraArgs={'ContentType': "application/json"})
 
     log.debug("[generate_app_log_parser_conf_file] End")
@@ -309,8 +340,8 @@ def generate_waf_log_parser_conf_file(log, stack_name, request_threshold, block_
 
     if not overwrite:
         try:
-            s3 = boto3.resource('s3')
-            file_obj = s3.Object(waf_access_log_bucket, remote_file)
+            s3_resource = create_resource('s3')
+            file_obj = s3_resource.Object(waf_access_log_bucket, remote_file)
             file_content = file_obj.get()['Body'].read()
             remote_conf = json.loads(file_content)
 
@@ -327,7 +358,7 @@ def generate_waf_log_parser_conf_file(log, stack_name, request_threshold, block_
     with open(local_file, 'w') as outfile:
         json.dump(default_conf, outfile)
 
-    s3_client = boto3.client('s3')
+    s3_client = create_client('s3')
     s3_client.upload_file(local_file, waf_access_log_bucket, remote_file, ExtraArgs={'ContentType': "application/json"})
 
     log.debug("[generate_waf_log_parser_conf_file] End")
@@ -341,7 +372,7 @@ def add_athena_partitions(log, add_athena_partition_lambda_function, resource_ty
                           glue_waf_log_table, waf_log_bucket, athena_work_group):
     log.info("[add_athena_partitions] Start")
 
-    lambda_client = boto3.client('lambda')
+    lambda_client = create_client('lambda')
     response = lambda_client.invoke(
         FunctionName=add_athena_partition_lambda_function.rsplit(":", 1)[-1],
         Payload="""{
@@ -424,7 +455,10 @@ def send_anonymous_usage_data(log, action_type, resource_properties):
                     "error_threshold": resource_properties['ErrorThreshold'],
                     "waf_block_period": resource_properties['WAFBlockPeriod'],
                     "aws_managed_rules": resource_properties['ActivateAWSManagedRulesParam'],
-                    "keep_original_s3_data": resource_properties['KeepDataInOriginalS3Location']
+                    "keep_original_s3_data": resource_properties['KeepDataInOriginalS3Location'],
+                    "allowed_ip_retention_period_minute": resource_properties['IPRetentionPeriodAllowedParam'],
+                    "denied_ip_retention_period_minute": resource_properties['IPRetentionPeriodDeniedParam'],
+                    "sns_email_notification": resource_properties['SNSEmailParam']
         }
 
         # --------------------------------------------------------------------------------------------------------------
@@ -483,7 +517,8 @@ def lambda_handler(event, context):
 
             if 'CREATE' in request_type:
                 configure_s3_bucket(log, event['ResourceProperties']['Region'],
-                                    event['ResourceProperties']['AppAccessLogBucket'])
+                                    event['ResourceProperties']['AppAccessLogBucket'],
+                                    event['ResourceProperties']['AccessLoggingBucket'])
                 add_s3_bucket_lambda_event(log, event['ResourceProperties']['AppAccessLogBucket'],
                                            lambda_log_parser_function,
                                            lambda_partition_s3_logs_function,
@@ -491,6 +526,9 @@ def lambda_handler(event, context):
                                            athena_parser)
 
             elif 'UPDATE' in request_type:
+                configure_s3_bucket(log, event['ResourceProperties']['Region'],
+                    event['ResourceProperties']['AppAccessLogBucket'],
+                    event['ResourceProperties']['AccessLoggingBucket'])
                 old_lambda_app_log_parser_function = event['OldResourceProperties']['LogParser'] if 'LogParser' in \
                                                                                                     event[
                                                                                                         'OldResourceProperties'] else None

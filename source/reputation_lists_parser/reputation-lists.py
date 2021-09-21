@@ -17,16 +17,21 @@ import os
 import requests
 import json
 import re
+from time import sleep
 from ipaddress import ip_address
 from ipaddress import ip_network
 from ipaddress import IPv4Network
 from ipaddress import IPv6Network
 import boto3
+from os import environ
+from botocore.config import Config
 from lib.solution_metrics import send_metrics
 from lib.waflibv2 import WAFLIBv2
+from lib.boto3_util import create_client
 
 waflib = WAFLIBv2()
 
+delay_between_updates = 5
 
 # Find matching ip address ranges from a line
 def find_ips(line, prefix=""):
@@ -103,6 +108,9 @@ def populate_ipsets(log, scope, ipset_name_v4, ipset_name_v6, ipset_arn_v4, ipse
     log.info(ipset)
     log.info("There are %d IP addresses in IPSet %s", len(ipset["IPSet"]["Addresses"]), ipset_name_v4)
 
+    # Sleep for a few seconds to mitigate AWS WAF Update API call throttling issue
+    sleep(delay_between_updates)
+
     waflib.update_ip_set(log, scope, ipset_name_v6, ipset_arn_v6, addressesV6)
     ipset = waflib.get_ip_set(log, scope, ipset_name_v6, ipset_arn_v6)
 
@@ -157,7 +165,7 @@ def send_anonymous_usage_data(log, scope):
             return
 
         log.debug("[send_anonymous_usage_data] Start")
-        cw = boto3.client('cloudwatch')
+        cw = create_client('cloudwatch')
         usage_data = {
             "data_type": "reputation_lists",
             "ipv4_reputation_lists_size": 0,

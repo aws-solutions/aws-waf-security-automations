@@ -36,18 +36,21 @@ Metadata:
           - ActivateBadBotProtectionParam
 
       - Label:
-          default: Settings
+          default: Log Monitoring Settings
         Parameters:
           - EndpointType
           - AppAccessLogBucket
-
-      - Label:
-          default: Advanced Settings
-        Parameters:
           - ErrorThreshold
           - RequestThreshold
           - WAFBlockPeriod
           - KeepDataInOriginalS3Location
+
+      - Label:
+          default: IP Retention Settings
+        Parameters:
+          - IPRetentionPeriodAllowedParam
+          - IPRetentionPeriodDeniedParam
+          - SNSEmailParam
 
     ParameterLabels:
       ActivateAWSManagedRulesParam:
@@ -87,7 +90,16 @@ Metadata:
         default: WAF Block Period
 
       KeepDataInOriginalS3Location:
-        default: Keep Data in Original s3 location
+        default: Keep Data in Original S3 Location
+
+      IPRetentionPeriodAllowedParam:
+        default: Retention Period (Minutes) for Allowed IP Set
+
+      IPRetentionPeriodDeniedParam:
+        default: Retention Period (Minutes) for Denied IP Set
+
+      SNSEmailParam:
+        default: Email for receiving notifcation upon Allowed or Denied IP Sets expiration
 
 Parameters:
   ActivateAWSManagedRulesParam:
@@ -211,6 +223,33 @@ Parameters:
       to keep a copy of the logs in their original location. Selecting "Yes" will duplicate your log
       storage. If you did not choose to activate Athena log parsing, ignore this parameter.
 
+  IPRetentionPeriodAllowedParam:
+    Type: Number
+    Default: -1
+    MinValue: -1
+    Description: >-
+      If you want to activate IP retention for the Allowed IP set, enter a number (15 or above) as the retention period (minutes). 
+      IP addresses reaching the retention period will expire and be removed from the IP set. A minimum 15-minute retention 
+      period is supported. If you enter a number between 0 and 15, it will be treated as 15. Leave it to default value -1 
+      to disable IP retention.
+
+  IPRetentionPeriodDeniedParam:
+    Type: Number
+    Default: -1
+    MinValue: -1
+    Description: >-
+      If you want to activate IP retention for the Denied IP set, enter a number (15 or above) as the retention period (minutes). 
+      IP addresses reaching the retention period will expire and be removed from the IP set. A minimum 15-minute retention 
+      period is supported. If you enter a number between 0 and 15, it will be treated as 15. Leave it to default value -1 
+      to disable IP retention.
+
+  SNSEmailParam:
+    Type: String
+    Default: ''
+    Description: >-
+      If you activated IP retention period above and want to receive an email notification when IP addresses expire, enter a valid email address.
+      If you did not activate IP retention or want to disable email notification, leave it blank (default).
+
 Conditions:
   HttpFloodProtectionRateBasedRuleActivated: !Equals
     - !Ref ActivateHttpFloodProtectionParam
@@ -268,6 +307,20 @@ Conditions:
     - Condition: ReputationListsProtectionActivated
     - Condition: AthenaLogParser
 
+  IPRetentionAllwedPeriod: !Not [!Equals [!Ref IPRetentionPeriodAllowedParam, -1]]
+  
+  IPRetentionDeniedPeriod: !Not [!Equals [!Ref IPRetentionPeriodDeniedParam, -1]]
+
+  IPRetentionPeriod: !Or
+    - Condition: IPRetentionAllwedPeriod
+    - Condition: IPRetentionDeniedPeriod
+
+  SNSEmailProvided: !Not [!Equals [!Ref SNSEmailParam, '']]
+
+  SNSEmail: !And
+    - Condition: IPRetentionPeriod
+    - Condition: SNSEmailProvided
+
 Mappings:
     SourceCode:
         General:
@@ -292,6 +345,8 @@ Mappings:
             WAFBadBotRule: 'BLOCK'
         Athena:
             QueryScheduledRunTime: 5   # by default athena query runs every 5 minutes, update it if needed
+        UserAgent:
+            UserAgentExtra: 'AwsSolution/SO0006/%VERSION%'
 
 Resources:
   CheckRequirements:
@@ -330,6 +385,8 @@ Resources:
         WAFBlockPeriod: !Ref WAFBlockPeriod
         GlueDatabaseName: !If [AthenaLogParser, !GetAtt CreateGlueDatabaseName.DatabaseName, '']
         DeliveryStreamName: !If [HttpFloodProtectionLogParserActivated, !GetAtt CreateDeliveryStreamName.DeliveryStreamName, '']
+        UUID: !GetAtt CreateUniqueID.UUID
+
 
   WebACLStack:
     Type: 'AWS::CloudFormation::Stack'
@@ -763,7 +820,8 @@ Resources:
                 - Effect: Allow
                   Action: 'lambda:InvokeFunction'
                   Resource:
-                    - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${AWS::StackName}*'
+                    - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*AddAthenaPartitions*'
+                    - !Sub 'arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:*ReputationListsParser*'
           - !Ref 'AWS::NoValue'
         - PolicyName: WAFAccess
           PolicyDocument:
@@ -820,6 +878,18 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*CustomResource*'
+        - !If
+          - ScannersProbesProtectionActivated
+          - PolicyName: S3BucketLoggingAccess
+            PolicyDocument:
+              Statement:
+                - Effect: Allow
+                  Action:
+                    - 's3:GetBucketLogging'
+                    - 's3:PutBucketLogging'
+                  Resource:
+                    - !Sub 'arn:${AWS::Partition}:s3:::${AppAccessLogBucket}'
+          - !Ref 'AWS::NoValue'
     Metadata:
       cfn_nag:
         rules_to_suppress:
@@ -990,7 +1060,7 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*AddAthenaPartitions*'
-
+                
   Helper:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -1005,9 +1075,142 @@ Resources:
         Variables:
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
           SCOPE: !If [AlbEndpoint, 'REGIONAL', 'CLOUDFRONT']
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
       Runtime: python3.8
       MemorySize: 128
       Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
+
+  LambdaRoleSetIPRetention:
+    Type: 'AWS::IAM::Role'
+    Condition: IPRetentionPeriod
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: LogsAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*SetIPRetention*'
+        - PolicyName: DDBAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dynamodb:PutItem'
+                Resource:
+                  - !GetAtt IPRetentionDDBTable.Arn
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: "LogsAccess permission restricted to account, region and log group name substring (SetIPRetention)."
+
+  LambdaRoleRemoveExpiredIP:
+    Type: 'AWS::IAM::Role'
+    Condition: IPRetentionPeriod
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+      Policies:
+        - PolicyName: LogsAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*RemoveExpiredIP*'
+        - PolicyName: WAFAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'wafv2:GetIPSet'
+                  - 'wafv2:UpdateIPSet'
+                Resource:
+                  - !GetAtt WebACLStack.Outputs.WAFWhitelistSetV4Arn
+                  - !GetAtt WebACLStack.Outputs.WAFBlacklistSetV4Arn
+                  - !GetAtt WebACLStack.Outputs.WAFWhitelistSetV6Arn
+                  - !GetAtt WebACLStack.Outputs.WAFBlacklistSetV6Arn
+        - PolicyName: DDBStreamAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "dynamodb:GetShardIterator"
+                  - "dynamodb:DescribeStream"
+                  - "dynamodb:GetRecords"
+                  - "dynamodb:ListStreams"
+                Resource:
+                  - !GetAtt IPRetentionDDBTable.StreamArn
+        - PolicyName: InvokeLambda
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "lambda:InvokeFunction"
+                Resource:
+                  - !GetAtt IPRetentionDDBTable.StreamArn
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W11
+            reason: "LogsAccess permission restricted to account, region and log group name substring (RemoveExpiredIP)."
+
+  SNSPublishPolicy:
+    Type: "AWS::IAM::Policy"
+    Condition: SNSEmail
+    Properties:
+      PolicyName: "SNSPublishPolicy"
+      Roles:
+        - Ref: LambdaRoleRemoveExpiredIP
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "SNS:Publish"
+            Resource:
+              - !Ref IPExpirationSNSTopic
 
   CreateUniqueID:
     Type: 'Custom::CreateUUID'
@@ -1048,16 +1251,58 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      LoggingConfiguration:
+        DestinationBucketName: !Ref AccessLoggingBucket
+        LogFilePrefix: WAF_Logs/
     Metadata:
         cfn_nag:
             rules_to_suppress:
                 -
-                    id: W35
-                    reason: "WafLogBucket does not require access logging to be configured by default."
-                -
                     id: W51
                     reason: "WafLogBucket does not require a bucket policy."
 
+  AccessLoggingBucket:
+    Type: AWS::S3::Bucket
+    Condition: LogParser
+    DependsOn: CheckRequirements
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AccessControl: LogDeliveryWrite
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: True
+        BlockPublicPolicy: True
+        IgnorePublicAcls: True
+        RestrictPublicBuckets: True
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: W35
+            reason: "This bucket is an access logging bucket for another bucket and does not require access logging to be configured for it."
+
+  AccessLoggingBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Condition: LogParser
+    Properties:
+      Bucket:
+        Ref: AccessLoggingBucket
+      PolicyDocument:
+        Statement:
+        - Action: "s3:*"
+          Condition:
+            Bool:
+              aws:SecureTransport: 'false'
+          Effect: Deny
+          Principal: "*"
+          Resource:
+            - !GetAtt AccessLoggingBucket.Arn
+            - !Join ["/", [!GetAtt AccessLoggingBucket.Arn, "*"]]
+          Sid: HttpsOnly
+        Version: '2012-10-17'
 
   LogParser:
     Type: 'AWS::Lambda::Function'
@@ -1104,9 +1349,17 @@ Resources:
           REQUEST_THRESHOLD: !Ref RequestThreshold
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
       Runtime: python3.8
       MemorySize: 512
       Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
   MoveS3LogsForPartition:
     Type: 'AWS::Lambda::Function'
@@ -1132,9 +1385,17 @@ Resources:
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
           KEEP_ORIGINAL_DATA: !Ref KeepDataInOriginalS3Location
           ENDPOINT: !Ref EndpointType
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
       Runtime: python3.8
       MemorySize: 512
       Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
   AddAthenaPartitions:
     Type: 'AWS::Lambda::Function'
@@ -1157,9 +1418,80 @@ Resources:
       Environment:
         Variables:
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
       Runtime: python3.8
       MemorySize: 512
       Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
+
+  SetIPRetention:
+    Type: 'AWS::Lambda::Function'
+    Condition: IPRetentionPeriod
+    Properties:
+      Description: >-
+        This lambda function processes CW events for WAF UpdateIPSet API calls. It writes relevant ip retention data into a DynamoDB table.
+      Handler: 'set_ip_retention.lambda_handler'
+      Role: !GetAtt LambdaRoleSetIPRetention.Arn
+      Code:
+        S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
+        S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'ip_retention_handler.zip']]
+      Environment:
+        Variables:
+          LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
+          TABLE_NAME: !Ref IPRetentionDDBTable
+          STACK_NAME: !Ref 'AWS::StackName'
+          IP_RETENTION_PEROID_ALLOWED_MINUTE: !Ref IPRetentionPeriodAllowedParam
+          IP_RETENTION_PEROID_DENIED_MINUTE: !Ref IPRetentionPeriodDeniedParam
+          REMOVE_EXPIRED_IP_LAMBDA_ROLE_NAME: !Ref LambdaRoleRemoveExpiredIP
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
+
+  RemoveExpiredIP:
+    Type: 'AWS::Lambda::Function'
+    Condition: IPRetentionPeriod
+    Properties:
+      Description: >-
+        This lambda function processes the DDB streams records (IP) expired by TTL. It removes expired IPs from WAF allowed or denied IP sets.
+      Handler: 'remove_expired_ip.lambda_handler'
+      Role: !GetAtt LambdaRoleRemoveExpiredIP.Arn
+      Code:
+        S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
+        S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'ip_retention_handler.zip']]
+      Environment:
+        Variables:
+          LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
+          SNS_EMAIL: !If [SNSEmail, 'yes', 'no']
+          SNS_TOPIC_ARN : !If [SNSEmail, !Ref IPExpirationSNSTopic, '']
+          SEND_ANONYMOUS_USAGE_DATA: !FindInMap ["Solution", "Data", "SendAnonymousUsageData"]
+          UUID: !GetAtt CreateUniqueID.UUID
+          SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
+          METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
+      Runtime: python3.8
+      MemorySize: 512
+      Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
   LambdaInvokePermissionAppLogParserS3:
     Type: 'AWS::Lambda::Permission'
@@ -1187,6 +1519,15 @@ Resources:
       Action: "lambda:InvokeFunction"
       Principal: "events.amazonaws.com"
       SourceArn: !GetAtt LambdaAddAthenaPartitionsEventsRule.Arn
+
+  LambdaInvokePermissionSetIPRetention:
+    Type: 'AWS::Lambda::Permission'
+    Condition: IPRetentionPeriod
+    Properties:
+      FunctionName: !Ref SetIPRetention
+      Action: 'lambda:InvokeFunction'
+      Principal: events.amazonaws.com
+      SourceArn: !GetAtt SetIPRetentionEventsRule.Arn
 
   LambdaAthenaWAFLogParser:
     Type: 'AWS::Events::Rule'
@@ -1238,7 +1579,7 @@ Resources:
     Condition: AthenaLogParser
     Properties:
       Description: Security Automations - Add partitions to Athena table
-      ScheduleExpression: rate(1 hour)
+      ScheduleExpression: cron(* ? * * * *)
       State: ENABLED
       Targets:
         - Arn: !GetAtt AddAthenaPartitions.Arn
@@ -1261,6 +1602,35 @@ Resources:
               GlueWafAccessLogsTable: !If [HttpFloodAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueWafAccessLogsTable, '']
               WafLogBucket: !If [HttpFloodAthenaLogParser, !Ref WafLogBucket, '']
               AthenaWorkGroup: !GetAtt FirehoseAthenaStack.Outputs.WAFAddPartitionAthenaQueryWorkGroup
+
+  SetIPRetentionEventsRule:
+    Type: AWS::Events::Rule
+    Condition: IPRetentionPeriod
+    Properties:
+      Description: AWS WAF Security Automations - Events rule for setting IP retention
+      EventPattern:
+        source:
+        - aws.wafv2
+        detail-type:
+        - AWS API Call via CloudTrail
+        detail:
+          eventSource:
+            - wafv2.amazonaws.com
+          eventName:
+            - UpdateIPSet
+          requestParameters:
+            name:
+            - !GetAtt WebACLStack.Outputs.NameWAFWhitelistSetV4
+            - !GetAtt WebACLStack.Outputs.NameWAFBlacklistSetV4
+            - !GetAtt WebACLStack.Outputs.NameWAFWhitelistSetV6
+            - !GetAtt WebACLStack.Outputs.NameWAFBlacklistSetV6
+      State: ENABLED
+      Targets:
+      - Arn:
+          Fn::GetAtt:
+          - SetIPRetention
+          - Arn
+        Id: SetIPRetentionLambda
 
   LambdaInvokePermissionAppLogParserCloudWatch:
     Type: 'AWS::Lambda::Permission'
@@ -1308,6 +1678,14 @@ Resources:
           LOG_TYPE: !If [AlbEndpoint, 'alb', 'cloudfront']
           SEND_ANONYMOUS_USAGE_DATA: !FindInMap ["Solution", "Data", "SendAnonymousUsageData"]
           IPREPUTATIONLIST_METRICNAME: !GetAtt WebACLStack.Outputs.IPReputationListsMetricName
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
 
   ReputationListsParserEventsRule:
@@ -1391,10 +1769,17 @@ Resources:
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
           STACK_NAME: !Ref 'AWS::StackName'
-
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
       Runtime: python3.8
       MemorySize: 128
       Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
   LambdaInvokePermissionBadBot:
     Type: 'AWS::Lambda::Permission'
@@ -1509,6 +1894,15 @@ Resources:
   ApiGatewayBadBotStageAccessLogGroup:
     Type: AWS::Logs::LogGroup
     Condition: BadBotProtectionActivated
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W84
+            reason: "Encryption not required: no sensitive data logged to CloudWatch."
+          -
+            id: W86
+            reason: "Leave the configuration of the expiration of the log data in CloudWatch log group to user due to potential compliance regulations."
 
   ApiGatewayBadBotCloudWatchRole:
     Type: AWS::IAM::Role
@@ -1569,9 +1963,17 @@ Resources:
           SCOPE: !If [AlbEndpoint, 'REGIONAL', 'CLOUDFRONT']
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
+          USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
       Runtime: python3.8
       MemorySize: 128
       Timeout: 300
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
   ConfigureAWSWAFLogs:
     Type: 'Custom::ConfigureAWSWAFLogs'
@@ -1592,6 +1994,7 @@ Resources:
       ScannersProbesLambdaLogParser: !If [ScannersProbesLambdaLogParser, 'yes', 'no']
       ScannersProbesAthenaLogParser: !If [ScannersProbesAthenaLogParser, 'yes', 'no']
       MoveS3LogsForPartition: !If [ScannersProbesAthenaLogParser, !GetAtt MoveS3LogsForPartition.Arn, !Ref 'AWS::NoValue']
+      AccessLoggingBucket: !If [ScannersProbesProtectionActivated, !Ref AccessLoggingBucket, !Ref 'AWS::NoValue']
 
   ConfigureWafLogBucket:
     Type: 'Custom::ConfigureWafLogBucket'
@@ -1637,6 +2040,9 @@ Resources:
       ActivateBadBotProtectionParam: !Ref ActivateBadBotProtectionParam
       ActivateAWSManagedRulesParam: !Ref ActivateAWSManagedRulesParam
       KeepDataInOriginalS3Location: !Ref KeepDataInOriginalS3Location
+      IPRetentionPeriodAllowedParam: !Ref IPRetentionPeriodAllowedParam
+      IPRetentionPeriodDeniedParam: !Ref IPRetentionPeriodDeniedParam
+      SNSEmailParam: !If [SNSEmail, 'yes', 'no']
       # AWS WAF Web ACL
       WAFWebACL: !GetAtt WebACLStack.Outputs.WAFWebACL
       # AWS WAF IP Sets - ID
@@ -1719,6 +2125,108 @@ Resources:
               WAFWebACLMetricName: !GetAtt WebACLStack.Outputs.WAFWebACLMetricName
               RegionMetric: !If [AlbEndpoint, !Sub ', "Region", "${AWS::Region}"', '']
               RegionProperties: !If [AlbEndpoint, !Sub '${AWS::Region}', 'us-east-1']
+  
+  IPRetentionDDBTable:
+    Type: 'AWS::DynamoDB::Table'
+    Condition: IPRetentionPeriod
+    Properties:
+        AttributeDefinitions:
+            - AttributeName: IPSetId
+              AttributeType: S
+            - AttributeName: ExpirationTime
+              AttributeType: N
+        BillingMode: PAY_PER_REQUEST
+        KeySchema:
+            - AttributeName: IPSetId
+              KeyType: HASH
+            - AttributeName: ExpirationTime
+              KeyType: RANGE
+        SSESpecification:
+          SSEEnabled: True
+          SSEType: KMS
+        StreamSpecification:
+          StreamViewType: OLD_IMAGE
+        TimeToLiveSpecification:
+          AttributeName: ExpirationTime
+          Enabled: true
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          -
+            id: W78
+            reason: "This DynamoDB table constains transactional ip retention data that will be expired by DynamoDB TTL. The data doesn't need to be retained after its lifecycle ends."
+
+  IPExpirationSNSTopic:
+    Type: AWS::SNS::Topic
+    Condition: SNSEmail
+    Properties:
+      DisplayName: 'AWS WAF Security Automations IP Expiration Notification'
+      TopicName: !Join ['-', ['AWS-WAF-Security-Automations-IP-Expiration-Notification', !GetAtt CreateUniqueID.UUID]]
+      KmsMasterKeyId: alias/aws/sns
+  
+  IPExpirationEmailNotification:
+    Type: AWS::SNS::Subscription
+    Condition: SNSEmail
+    Properties:
+      Endpoint: !Ref SNSEmailParam
+      Protocol: email
+      TopicArn: !Ref IPExpirationSNSTopic
+  
+  SNSNotificationPolicy:
+    Type: AWS::SNS::TopicPolicy
+    Condition: SNSEmail
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+          - id: F18
+            reason: "Condition restricts permissions to current account."
+    Properties:
+      Topics:
+        - !Ref IPExpirationSNSTopic
+      PolicyDocument:
+        Statement:
+          - Sid: __default_statement_ID
+            Effect: Allow
+            Principal:
+              AWS: "*"
+            Action:
+              - SNS:GetTopicAttributes
+              - SNS:SetTopicAttributes
+              - SNS:AddPermission
+              - SNS:RemovePermission
+              - SNS:DeleteTopic
+              - SNS:Subscribe
+              - SNS:ListSubscriptionsByTopic
+              - SNS:Publish
+              - SNS:Receive
+            Resource: !Ref IPExpirationSNSTopic
+            Condition:
+              StringEquals:
+                AWS:SourceOwner: !Sub ${AWS::AccountId}
+          - Sid: TrustLambdaToPublishEventsToMyTopic
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: SNS:Publish
+            Resource: !Ref IPExpirationSNSTopic
+          - Sid: AllowPublishThroughSSLOnly
+            Action: SNS:Publish
+            Effect: Deny
+            Resource:
+              - !Ref IPExpirationSNSTopic
+            Condition:
+              Bool:
+                aws:SecureTransport: 'false'
+            Principal: "*"
+  
+  DDBStreamToLambdaESMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Condition: IPRetentionPeriod
+    Properties: 
+      Enabled: true
+      EventSourceArn: !GetAtt IPRetentionDDBTable.StreamArn
+      FunctionName: !GetAtt RemoveExpiredIP.Arn
+      StartingPosition: LATEST
 
 Outputs:
   BadBotHoneypotEndpoint:

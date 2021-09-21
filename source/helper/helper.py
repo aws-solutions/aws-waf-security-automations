@@ -21,7 +21,10 @@ import string
 import random
 import requests
 import os
+from os import environ
+from botocore.config import Config
 from lib.waflibv2 import WAFLIBv2
+from lib.boto3_util import create_client
 
 logging.getLogger().debug('Loading function')
 
@@ -47,7 +50,7 @@ def check_app_log_bucket(log, region, bucket_name):
     # Check if bucket exists (and inside the specified region)
     # ------------------------------------------------------------------------------------------------------------------
     exists = True
-    s3_client = boto3.client('s3')
+    s3_client = create_client('s3')
     try:
         response = s3_client.head_bucket(Bucket=bucket_name)
         log.info("[check_app_log_bucket]response: \n%s" % response)
@@ -107,7 +110,7 @@ def check_service_dependencies(log, resource_properties):
     # ------------------------------------------------------------------------------------------------------------------
     if resource_properties['AthenaLogParser'] == "yes":
         try:
-            athena_client = boto3.client('athena')
+            athena_client = create_client('athena')
             athena_client.list_named_queries()
         except botocore.exceptions.EndpointConnectionError:
             unavailable_services.append('Amazon Athena')
@@ -119,7 +122,7 @@ def check_service_dependencies(log, resource_properties):
     # ------------------------------------------------------------------------------------------------------------------
     if resource_properties['AthenaLogParser'] == "yes":
         try:
-            glue_client = boto3.client('glue')
+            glue_client = create_client('glue')
             glue_client.get_databases()
         except botocore.exceptions.EndpointConnectionError:
             unavailable_services.append('AWS Glue')
@@ -131,7 +134,7 @@ def check_service_dependencies(log, resource_properties):
     # ------------------------------------------------------------------------------------------------------------------
     if resource_properties['HttpFloodProtectionLogParserActivated'] == "yes":
         try:
-            firehose_client = boto3.client('firehose')
+            firehose_client = create_client('firehose')
             firehose_client.list_delivery_streams()
         except botocore.exceptions.EndpointConnectionError:
             unavailable_services.append('Amazon Kinesis Data Firehose')

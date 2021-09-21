@@ -191,7 +191,7 @@ Resources:
       Scope: !Sub '${RegionScope}'
       IPAddressVersion: 'IPV4'
       Name: !Sub '${ParentStackName}WhitelistSetIPV4'
-      Description: 'Allow whitelist for IPV4 addresses'
+      Description: 'Allow List for IPV4 addresses'
       Addresses: []
 
   WAFBlacklistSetV4:
@@ -201,7 +201,7 @@ Resources:
       Scope: !Sub '${RegionScope}'
       IPAddressVersion: 'IPV4'
       Name: !Sub '${ParentStackName}BlacklistSetIPV4'
-      Description: 'Block blacklist for IPV4 addresses'
+      Description: 'Block Denied List for IPV4 addresses'
       Addresses: []
 
   WAFHttpFloodSetV4:
@@ -259,7 +259,7 @@ Resources:
       Scope: !Sub '${RegionScope}'
       IPAddressVersion: IPV6
       Name: !Sub '${ParentStackName}WhitelistSetIPV6'
-      Description: 'Allow whitelist for IPV6 addresses'
+      Description: 'Allow list for IPV6 addresses'
       Addresses: []
 
   WAFBlacklistSetV6:
@@ -269,7 +269,7 @@ Resources:
       Scope: !Sub '${RegionScope}'
       IPAddressVersion: IPV6
       Name: !Sub '${ParentStackName}BlacklistSetIPV6'
-      Description: 'Block blacklist for IPV6 addresses'
+      Description: 'Block Denied List for IPV6 addresses'
       Addresses: []
 
   WAFHttpFloodSetV6:
@@ -356,6 +356,13 @@ Resources:
         Variables:
           SECONDS: '2'
           LOG_LEVEL: !Ref LogLevel
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
 
 # Adding a (priority 0) rule for AWS Managed RuleSet, optionally triggered by params
 

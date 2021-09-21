@@ -46,6 +46,8 @@ Parameters:
     Type: String
   DeliveryStreamName:
     Type: String
+  UUID:
+    Type: String
 
 Conditions:
   AlbEndpoint: !Equals
@@ -144,6 +146,8 @@ Resources:
     Properties:
       DeliveryStreamName: !Ref DeliveryStreamName
       DeliveryStreamType: DirectPut
+      DeliveryStreamEncryptionConfigurationInput:
+        KeyType: AWS_OWNED_CMK
       ExtendedS3DestinationConfiguration:
         BucketARN: !Ref WafLogBucketArn
         BufferingHints:
@@ -404,7 +408,7 @@ Resources:
       Type: AWS::Athena::WorkGroup
       Condition: AthenaLogParser
       Properties:
-        Name: WAFAddPartitionAthenaQueryWorkGroup
+        Name: !Join ['-', ['WAFAddPartitionAthenaQueryWorkGroup', !Ref UUID]]
         Description: Athena WorkGroup for adding Athena partition queries used by AWS WAF Security Automations Solution
         State: ENABLED
         RecursiveDeleteOption: true

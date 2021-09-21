@@ -16,7 +16,7 @@
 import sys
 import datetime
 import logging
-from log_parser import build_athena_queries, add_athena_partitions
+import build_athena_queries, add_athena_partitions
 from datetime import datetime
 from freezegun import freeze_time
 
@@ -40,7 +40,7 @@ def test_build_athena_queries_for_cloudfront_logs():
         log, cloudfront_log_type, database_name, table_name,
         end_timestamp, waf_block_period, error_threshold)
 
-    with open('../source/tests/cloudfront_logs_query.txt', 'r') as file:
+    with open('./test/test_data/cloudfront_logs_query.txt', 'r') as file:
         cloudfront_logs_query = file.read()
     assert type(query_string) is str
     assert query_string == cloudfront_logs_query
@@ -51,7 +51,7 @@ def test_build_athena_queries_for_alb_logs():
         log, alb_log_type, database_name, table_name,
         end_timestamp, waf_block_period, error_threshold)
 
-    with open('../source/tests/alb_logs_query.txt', 'r') as file:
+    with open('./test/test_data/alb_logs_query.txt', 'r') as file:
         alb_logs_query = file.read()
     assert type(query_string) is str
     assert query_string == alb_logs_query
@@ -62,7 +62,7 @@ def test_build_athena_queries_for_waf_logs():
         log, database_name, table_name,
         end_timestamp, waf_block_period, request_threshold)
 
-    with open('../source/tests/waf_logs_query.txt', 'r') as file:
+    with open('./test/test_data/waf_logs_query.txt', 'r') as file:
         waf_logs_query = file.read()
     assert type(query_string) is str
     assert query_string == waf_logs_query
@@ -73,7 +73,7 @@ def test_add_athena_partitions_build_query_string():
     query_string = add_athena_partitions.build_athena_query(
         log, database_name, table_name)
 
-    with open('../source/tests/athena_partitions_query.txt', 'r') as file:
+    with open('./test/test_data/athena_partitions_query.txt', 'r') as file:
         athena_partitions_query = file.read()
     assert type(query_string) is str
     assert query_string == athena_partitions_query
