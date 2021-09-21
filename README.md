@@ -37,7 +37,7 @@ AWS WAF Security Automations architecture
 
 AWS Managed Rules (A): This set of AWS managed core rules provides protection against exploitation of a wide range of common application vulnerabilities or other unwanted traffic.
 
-Manual IP lists (B and C): This component creates two specific AWS WAF rules that allow you to manually insert IP addresses that you want to block or allow.
+Manual IP lists (B and C): This component creates two specific AWS WAF rules that allow you to manually insert IP addresses that you want to block or allow. You can also configure IP retention and remove expired IP addresses from these IP lists.
 
 SQL Injection (D) and XSS (E): The solution configures two native AWS WAF rules that are designed to protect against common SQL injection or cross-site scripting (XSS) patterns in the URI, query string, or body of a request.
 
