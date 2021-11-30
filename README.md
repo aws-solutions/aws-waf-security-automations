@@ -1,4 +1,4 @@
-**[🚀 Solution Landing Page](https://aws.amazon.com/solutions/implementations/aws-waf-security-automations/>)** | **[🚧 Feature request](https://github.com/awslabs/aws-waf-security-automations/issues/new?assignees=&labels=feature-request%2C+enhancement&template=feature_request.md&title=)** | **[🐛 Bug Report](https://github.com/awslabs/aws-waf-security-automations/issues/new?assignees=&labels=bug%2C+triage&template=bug_report.md&title=)**
+**[🚀 Solution Landing Page](https://aws.amazon.com/solutions/implementations/aws-waf-security-automations)** | **[🚧 Feature request](https://github.com/awslabs/aws-waf-security-automations/issues/new?assignees=&labels=feature-request%2C+enhancement&template=feature_request.md&title=)** | **[🐛 Bug Report](https://github.com/awslabs/aws-waf-security-automations/issues/new?assignees=&labels=bug%2C+triage&template=bug_report.md&title=)**
 
 Note: If you want to use the solution without building from source, navigate to Solution Landing Page
 
@@ -122,6 +122,8 @@ aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/$
 
 * From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template.
 * Using AWS CloudFormation, launch the AWS WAF Security Automations solution stack using the copied Amazon S3 link for the aws-waf-security-automations.template.
+
+#### _Note:_ When deploying the template for CloudFront endpoint, you can launch it only from us-east-1 region.
 
 <a name="file-structure"></a>
 # File structure
