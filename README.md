@@ -1,3 +1,5 @@
+# Note: As of 01/18/2022, AWS WAF Security Automations for WAF Classic has been deprecated. For the latest features and updates, we encourage customers to use [AWS WAF Security Automations](https://docs.aws.amazon.com/solutions/latest/aws-waf3-security-automations/welcome.html), which supports the latest WAFV2.
+
 # AWS WAF Security Automations
 A solution that contains all AWS WAF samples developed so far - waf-reactive-blacklist, waf-bad-bot-blocking, waf-block-bad-behaving and waf-reputation-lists.
 
@@ -52,7 +54,7 @@ export SOLUTION_NAME="aws-waf-security-automations" # name of the solution
 export VERSION=<VERSION> # version number for the customized code
 export AWS_REGION=<AWS_REGION> # region where the distributable is deployed
 ```
-# _Note:_ You must manually create two buckets in S3 called $TEMPLATE_OUTPUT_BUCKET and $DIST_OUTPUT_BUCKET-$AWS_REGION to copy the distribution. The assets in bucket should be publicly accessible. The build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
+#### _Note:_ You must manually create two buckets in S3 called $TEMPLATE_OUTPUT_BUCKET and $DIST_OUTPUT_BUCKET-$AWS_REGION to copy the distribution. The assets in bucket should be publicly accessible. The build-s3-dist.sh script DOES NOT do this and the CloudFormation template expects/references the REGION specific bucket.
 
 #### 05. Build the AWS WAF Security Automations solution for deployment:
 ```
@@ -63,7 +65,7 @@ chmod +x ./build-s3-dist.sh && ./build-s3-dist.sh $TEMPLATE_OUTPUT_BUCKET $DIST_
 aws s3 cp ./deployment/global-s3-assets s3://$TEMPLATE_OUTPUT_BUCKET/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
 aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/aws-waf-security-automations/$VERSION --recursive --acl bucket-owner-full-control
 ```
-# _Note:_ You must use proper acl and profile for the copy operation as applicable.
+#### _Note:_ You must use proper acl and profile for the copy operation as applicable.
 
 #### 07. Deploy the AWS WAF Security Automations solution:
 * From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template.
@@ -71,7 +73,7 @@ aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/a
 
 ***
 
-Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+Copyright 2022 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
