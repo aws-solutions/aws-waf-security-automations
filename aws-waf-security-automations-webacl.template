@@ -1,0 +1,773 @@
+# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# You may not use this file except in compliance with the License.
+# A copy of the License is located at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# or in the "license" file accompanying this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing
+# permissions and limitations under the License.
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: >-
+  (SO0006-WebACL) - AWS WAF Security Automations %VERSION%: This AWS CloudFormation template helps
+  you provision the AWS WAF Security Automations stack without worrying about creating and
+  configuring the underlying AWS infrastructure.
+
+  **WARNING** This template creates an AWS WAF Web ACL and Amazon CloudWatch custom metrics.
+  You will be billed for the AWS resources used if you create a stack from this template.
+
+Parameters:
+  ActivateAWSManagedRulesParam:
+    Type: String
+  ActivateSqlInjectionProtectionParam:
+    Type: String
+  ActivateCrossSiteScriptingProtectionParam:
+    Type: String
+  ActivateHttpFloodProtectionParam:
+    Type: String
+  ActivateScannersProbesProtectionParam:
+    Type: String
+  ActivateReputationListsProtectionParam:
+    Type: String
+  ActivateBadBotProtectionParam:
+    Type: String
+  RequestThreshold:
+    Type: Number
+  RegionScope:
+    Type: String
+  ParentStackName:
+    Type: String
+  GlueAccessLogsDatabase:
+    Type: String
+  GlueAppAccessLogsTable:
+    Type: String
+  GlueWafAccessLogsTable:
+    Type: String
+  LogLevel:
+    Type: String
+
+Conditions:
+  AWSManagedRulesActivated: !Equals
+    - !Ref ActivateAWSManagedRulesParam
+    - 'yes'
+
+  SqlInjectionProtectionActivated: !Equals
+    - !Ref ActivateSqlInjectionProtectionParam
+    - 'yes'
+
+  CrossSiteScriptingProtectionActivated: !Equals
+    - !Ref ActivateCrossSiteScriptingProtectionParam
+    - 'yes'
+
+  HttpFloodProtectionRateBasedRuleActivated: !Equals
+    - !Ref ActivateHttpFloodProtectionParam
+    - 'yes - AWS WAF rate based rule'
+
+  HttpFloodLambdaLogParser: !Equals
+    - !Ref ActivateHttpFloodProtectionParam
+    - 'yes - AWS Lambda log parser'
+
+  HttpFloodAthenaLogParser: !Equals
+    - !Ref ActivateHttpFloodProtectionParam
+    - 'yes - Amazon Athena log parser'
+
+  HttpFloodProtectionLogParserActivated: !Or
+    - Condition: HttpFloodLambdaLogParser
+    - Condition: HttpFloodAthenaLogParser
+
+  ScannersProbesLambdaLogParser: !Equals
+    - !Ref ActivateScannersProbesProtectionParam
+    - 'yes - AWS Lambda log parser'
+
+  ScannersProbesAthenaLogParser: !Equals
+    - !Ref ActivateScannersProbesProtectionParam
+    - 'yes - Amazon Athena log parser'
+
+  ScannersProbesProtectionActivated: !Or
+    - Condition: ScannersProbesLambdaLogParser
+    - Condition: ScannersProbesAthenaLogParser
+
+  ReputationListsProtectionActivated: !Equals
+    - !Ref ActivateReputationListsProtectionParam
+    - 'yes'
+
+  BadBotProtectionActivated: !Equals
+    - !Ref ActivateBadBotProtectionParam
+    - 'yes'
+
+Mappings:
+  SourceCode:
+    General:
+      TemplateBucket: '%TEMPLATE_OUTPUT_BUCKET%'
+      SourceBucket: '%DIST_OUTPUT_BUCKET%'
+      KeyPrefix: '%SOLUTION_NAME%/%VERSION%'
+
+Resources:
+# Timers
+# There is a rate throttling issue when creating so many calls to create IPSet (1 TPS)
+# By daisychaining these timers at N second intervals we can pace the calls to create new IPSets
+# binding them with DependsOn to the right timer
+
+  TimerWhiteV4:
+    Type: 'Custom::Timer'
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerBlackV4:
+    Type: 'Custom::Timer'
+    DependsOn: TimerWhiteV4
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerHttpFloodV4:
+    Type: 'Custom::Timer'
+    DependsOn: TimerBlackV4
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerScannersV4:
+    Type: 'Custom::Timer'
+    DependsOn: TimerHttpFloodV4
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerReputationV4:
+    DependsOn: TimerScannersV4
+    Type: 'Custom::Timer'
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerBadBotV4:
+    Type: 'Custom::Timer'
+    DependsOn: TimerReputationV4
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerWhiteV6:
+    Type: 'Custom::Timer'
+    DependsOn: TimerBadBotV4
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerBlackV6:
+    Type: 'Custom::Timer'
+    DependsOn: TimerWhiteV6
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerHttpFloodV6:
+    Type: 'Custom::Timer'
+    DependsOn: TimerBlackV6
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerScannersV6:
+    Type: 'Custom::Timer'
+    DependsOn: TimerHttpFloodV6
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerReputationV6:
+    DependsOn: TimerScannersV6
+    Type: 'Custom::Timer'
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+  TimerBadBotV6:
+    Type: 'Custom::Timer'
+    DependsOn: TimerReputationV6
+    Properties:
+      ServiceToken: !GetAtt CustomTimer.Arn
+
+# IPV4 IPSets
+  WAFWhitelistSetV4:
+    Type: 'AWS::WAFv2::IPSet'
+    DependsOn: TimerWhiteV4
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: 'IPV4'
+      Name: !Sub '${ParentStackName}WhitelistSetIPV4'
+      Description: 'Allow List for IPV4 addresses'
+      Addresses: []
+
+  WAFBlacklistSetV4:
+    Type: 'AWS::WAFv2::IPSet'
+    DependsOn: TimerBlackV4
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: 'IPV4'
+      Name: !Sub '${ParentStackName}BlacklistSetIPV4'
+      Description: 'Block Denied List for IPV4 addresses'
+      Addresses: []
+
+  WAFHttpFloodSetV4:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: HttpFloodProtectionLogParserActivated
+    DependsOn: TimerHttpFloodV4
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: 'IPV4'
+      Name: !Sub '${ParentStackName}HTTPFloodSetIPV4'
+      Description: 'Block HTTP Flood IPV4 addresses'
+      Addresses: []
+
+  WAFScannersProbesSetV4:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: ScannersProbesProtectionActivated
+    DependsOn: TimerScannersV4
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: 'IPV4'
+      Name: !Sub '${ParentStackName}ScannersProbesSetIPV4'
+      Description: 'Block Scanners/Probes IPV4 addresses'
+      Addresses: []
+
+  WAFReputationListsSetV4:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: ReputationListsProtectionActivated
+    DependsOn: TimerReputationV4
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: 'IPV4'
+      Name: !Sub '${ParentStackName}IPReputationListsSetIPV4'
+      Description: 'Block Reputation List IPV4 addresses'
+      Addresses: []
+ 
+  WAFBadBotSetV4:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: BadBotProtectionActivated
+    DependsOn: TimerBadBotV4
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: 'IPV4'
+      Name: !Sub '${ParentStackName}IPBadBotSetIPV4'
+      Description: 'Block Bad Bot IPV4 addresses'
+      Addresses: []
+
+# IPV6 IPSets
+# Introduced an artificial DependsOn property here on each of the previous IPSets to address
+# a rate throttling issue when creating so many calls to create IPSet
+# The rate limit is 1 call per second to the IPSet API
+  WAFWhitelistSetV6:
+    Type: 'AWS::WAFv2::IPSet'
+    DependsOn: TimerWhiteV6
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: IPV6
+      Name: !Sub '${ParentStackName}WhitelistSetIPV6'
+      Description: 'Allow list for IPV6 addresses'
+      Addresses: []
+
+  WAFBlacklistSetV6:
+    Type: 'AWS::WAFv2::IPSet'
+    DependsOn: TimerBlackV6
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: IPV6
+      Name: !Sub '${ParentStackName}BlacklistSetIPV6'
+      Description: 'Block Denied List for IPV6 addresses'
+      Addresses: []
+
+  WAFHttpFloodSetV6:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: HttpFloodProtectionLogParserActivated
+    DependsOn: TimerHttpFloodV6
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: IPV6
+      Name: !Sub '${ParentStackName}HTTPFloodSetIPV6'
+      Description: 'Block HTTP Flood IPV6 addresses'
+      Addresses: []
+
+  WAFScannersProbesSetV6:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: ScannersProbesProtectionActivated
+    DependsOn: TimerScannersV6
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: IPV6
+      Name: !Sub '${ParentStackName}ScannersProbesSetIPV6'
+      Description: 'Block Scanners/Probes IPV6 addresses'
+      Addresses: []
+
+  WAFReputationListsSetV6:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: ReputationListsProtectionActivated
+    DependsOn: TimerReputationV6
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: IPV6
+      Name: !Sub '${ParentStackName}IPReputationListsSetIPV6'
+      Description: 'Block Reputation List IPV6 addresses'
+      Addresses: []
+
+  WAFBadBotSetV6:
+    Type: 'AWS::WAFv2::IPSet'
+    Condition: BadBotProtectionActivated
+    DependsOn: TimerBadBotV6
+    Properties:
+      Scope: !Sub '${RegionScope}'
+      IPAddressVersion: IPV6
+      Name: !Sub '${ParentStackName}IPBadBotSetIPV6'
+      Description: 'Block Bad Bot IPV6 addresses'
+      Addresses: []
+
+  LambdaRoleCustomTimer:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*CustomTimer*'
+
+  CustomTimer:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      Description: >-
+        This lambda function counts X seconds and can be used to slow down component creation in CloudFormation
+      Handler: 'timer.lambda_handler'
+      Role: !GetAtt LambdaRoleCustomTimer.Arn
+      Code:
+        S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
+        S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'timer.zip']]
+      Runtime: python3.8
+      MemorySize: 128
+      Timeout: 300
+      Environment:
+        Variables:
+          SECONDS: '2'
+          LOG_LEVEL: !Ref LogLevel
+    Metadata:
+      cfn_nag:
+        rules_to_suppress:
+        - id: W89
+          reason: There is no need to run this lambda in a VPC
+        - id: W92
+          reason: There is no need for Reserved Concurrency
+
+# Adding a (priority 0) rule for AWS Managed RuleSet, optionally triggered by params
+
+  WAFWebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: !Ref 'ParentStackName'
+      Description: 'Custom WAFWebACL'
+      Scope: !Sub '${RegionScope}'
+      VisibilityConfig: 
+        SampledRequestsEnabled: true
+        CloudWatchMetricsEnabled: true
+        MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WAFWebACL']]
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - !If
+          - AWSManagedRulesActivated
+          - Name: AWS-AWSManagedRulesCommonRuleSet
+            Priority: 0
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: MetricForAMRCRS
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesCommonRuleSet
+          - !Ref 'AWS::NoValue'
+        - Name: !Sub '${ParentStackName}WhitelistRule'
+          Priority: 1
+          Action:
+            Allow: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'WhitelistRule']]
+          Statement:
+            OrStatement:
+              Statements:
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFWhitelistSetV4.Arn
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFWhitelistSetV6.Arn
+        - Name: !Sub '${ParentStackName}BlacklistRule'
+          Priority: 2
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BlacklistRule']]
+          Statement:
+            OrStatement:
+              Statements:
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFBlacklistSetV4.Arn
+                - IPSetReferenceStatement:
+                    Arn: !GetAtt WAFBlacklistSetV6.Arn
+        - !If
+          - HttpFloodProtectionLogParserActivated
+          - Name: !Sub '${ParentStackName}HttpFloodRegularRule'
+            Priority: 3
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'HttpFloodRegularRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFHttpFloodSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFHttpFloodSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - HttpFloodProtectionRateBasedRuleActivated
+          - Name: !Sub '${ParentStackName}HttpFloodRateBasedRule'
+            Priority: 4
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'HttpFloodRateBasedRule']]
+            Statement:
+              RateBasedStatement:
+                AggregateKeyType: "IP"
+                Limit: !Ref RequestThreshold
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ScannersProbesProtectionActivated
+          - Name: !Sub '${ParentStackName}ScannersAndProbesRule'
+            Priority: 5
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'ScannersProbesRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFScannersProbesSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFScannersProbesSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - ReputationListsProtectionActivated
+          - Name: !Sub '${ParentStackName}IPReputationListsRule'
+            Priority: 6
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'IPReputationListsRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFReputationListsSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFReputationListsSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - BadBotProtectionActivated
+          - Name: !Sub '${ParentStackName}BadBotRule'
+            Priority: 7
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'BadBotRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFBadBotSetV4.Arn
+                  - IPSetReferenceStatement:
+                      Arn: !GetAtt WAFBadBotSetV6.Arn
+          - !Ref 'AWS::NoValue'
+        - !If
+          - SqlInjectionProtectionActivated
+          - Name: !Sub '${ParentStackName}SqlInjectionRule'
+            Priority: 20
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'SqlInjectionRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - SqliMatchStatement:
+                      FieldToMatch:
+                        QueryString: {}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - SqliMatchStatement:
+                      FieldToMatch:
+                        Body: {}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - SqliMatchStatement:
+                      FieldToMatch:
+                        UriPath: {}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - SqliMatchStatement:
+                      FieldToMatch:
+                        SingleHeader: {Name: "Authorization"}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - SqliMatchStatement:
+                      FieldToMatch:
+                        SingleHeader: {Name: "Cookie"}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+          - !Ref 'AWS::NoValue'
+        - !If
+          - CrossSiteScriptingProtectionActivated
+          - Name: !Sub '${ParentStackName}XssRule'
+            Priority: 30
+            Action:
+              Block: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'XssRule']]
+            Statement:
+              OrStatement:
+                Statements:
+                  - XssMatchStatement:
+                      FieldToMatch:
+                        QueryString: {}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - XssMatchStatement:
+                      FieldToMatch:
+                        Body: {}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - XssMatchStatement:
+                      FieldToMatch:
+                        UriPath: {}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+                  - XssMatchStatement:
+                      FieldToMatch:
+                        SingleHeader: {Name: "Cookie"}
+                      TextTransformations:
+                        - Priority: 1
+                          Type: URL_DECODE
+                        - Priority: 2
+                          Type: HTML_ENTITY_DECODE
+          - !Ref 'AWS::NoValue'
+
+Outputs:
+# Arns
+  WAFWhitelistSetV4Arn:
+    Value: !GetAtt WAFWhitelistSetV4.Arn
+
+  WAFBlacklistSetV4Arn:
+    Value: !GetAtt WAFBlacklistSetV4.Arn
+
+  WAFHttpFloodSetV4Arn:
+    Value: !GetAtt WAFHttpFloodSetV4.Arn
+    Condition: HttpFloodProtectionLogParserActivated
+
+  WAFScannersProbesSetV4Arn:
+    Value: !GetAtt WAFScannersProbesSetV4.Arn
+    Condition: ScannersProbesProtectionActivated
+
+  WAFReputationListsSetV4Arn:
+    Value: !GetAtt WAFReputationListsSetV4.Arn
+    Condition: ReputationListsProtectionActivated
+
+  WAFBadBotSetV4Arn:
+    Value: !GetAtt WAFBadBotSetV4.Arn
+    Condition: BadBotProtectionActivated
+
+  WAFWhitelistSetV6Arn:
+    Value: !GetAtt WAFWhitelistSetV6.Arn
+
+  WAFBlacklistSetV6Arn:
+    Value: !GetAtt WAFBlacklistSetV6.Arn
+
+  WAFHttpFloodSetV6Arn:
+    Value: !GetAtt WAFHttpFloodSetV6.Arn
+    Condition: HttpFloodProtectionLogParserActivated
+
+  WAFScannersProbesSetV6Arn:
+    Value: !GetAtt WAFScannersProbesSetV6.Arn
+    Condition: ScannersProbesProtectionActivated
+
+  WAFReputationListsSetV6Arn:
+    Value: !GetAtt WAFReputationListsSetV6.Arn
+    Condition: ReputationListsProtectionActivated
+
+  WAFBadBotSetV6Arn:
+    Value: !GetAtt WAFBadBotSetV6.Arn
+    Condition: BadBotProtectionActivated
+
+# Names
+  NameWAFWhitelistSetV4:
+    Value: !Sub '${ParentStackName}WhitelistSetIPV4'
+
+  NameWAFBlacklistSetV4:
+    Value: !Sub '${ParentStackName}BlacklistSetIPV4'
+
+  NameHttpFloodSetV4:
+    Value: !Sub '${ParentStackName}HTTPFloodSetIPV4'
+    Condition: HttpFloodProtectionLogParserActivated
+
+  NameScannersProbesSetV4:
+    Value: !Sub '${ParentStackName}ScannersProbesSetIPV4'
+    Condition: ScannersProbesProtectionActivated
+
+  NameReputationListsSetV4:
+    Value: !Sub '${ParentStackName}IPReputationListsSetIPV4'
+    Condition: ReputationListsProtectionActivated
+
+  NameBadBotSetV4:
+    Value: !Sub '${ParentStackName}IPBadBotSetIPV4'
+    Condition: BadBotProtectionActivated
+
+  NameWAFWhitelistSetV6:
+    Value: !Sub '${ParentStackName}WhitelistSetIPV6'
+
+  NameWAFBlacklistSetV6:
+    Value: !Sub '${ParentStackName}BlacklistSetIPV6'
+
+  NameHttpFloodSetV6:
+    Value: !Sub '${ParentStackName}HTTPFloodSetIPV6'
+    Condition: HttpFloodProtectionLogParserActivated
+
+  NameScannersProbesSetV6:
+    Value: !Sub '${ParentStackName}ScannersProbesSetIPV6'
+    Condition: ScannersProbesProtectionActivated
+
+  NameReputationListsSetV6:
+    Value: !Sub '${ParentStackName}IPReputationListsSetIPV6'
+    Condition: ReputationListsProtectionActivated
+
+  NameBadBotSetV6:
+    Value: !Sub '${ParentStackName}IPBadBotSetIPV6'
+    Condition: BadBotProtectionActivated
+
+  GlueAccessLogsDatabase:
+    Value: !Ref GlueAccessLogsDatabase
+
+  GlueAppAccessLogsTable:
+    Value: !Ref GlueAppAccessLogsTable
+
+  GlueWafAccessLogsTable:
+    Value: !Ref GlueWafAccessLogsTable
+
+  WAFWebACL:
+    Value: !Ref WAFWebACL
+
+  WAFWebACLArn:
+    Value: !GetAtt WAFWebACL.Arn
+
+  WAFWebACLMetricName:
+    Value: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'MaliciousRequesters']]
+
+  IPReputationListsMetricName:
+    Value: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'IPReputationListsRule']]
+
+  Version:
+    Value: "%VERSION%"
+
+# Ids
+  WAFWhitelistSetV4Id:
+    Value: !GetAtt WAFWhitelistSetV4.Id
+
+  WAFBlacklistSetV4Id:
+    Value: !GetAtt WAFBlacklistSetV4.Id
+
+  WAFHttpFloodSetV4Id:
+    Value: !GetAtt WAFHttpFloodSetV4.Id
+    Condition: HttpFloodProtectionLogParserActivated
+
+  WAFScannersProbesSetV4Id:
+    Value: !GetAtt WAFScannersProbesSetV4.Id
+    Condition: ScannersProbesProtectionActivated
+
+  WAFReputationListsSetV4Id:
+    Value: !GetAtt WAFReputationListsSetV4.Id
+    Condition: ReputationListsProtectionActivated
+
+  WAFBadBotSetV4Id:
+    Value: !GetAtt WAFBadBotSetV4.Id
+    Condition: BadBotProtectionActivated
+
+  WAFWhitelistSetV6Id:
+    Value: !GetAtt WAFWhitelistSetV6.Id
+
+  WAFBlacklistSetV6Id:
+    Value: !GetAtt WAFBlacklistSetV6.Id
+
+  WAFHttpFloodSetV6Id:
+    Value: !GetAtt WAFHttpFloodSetV6.Id
+    Condition: HttpFloodProtectionLogParserActivated
+
+  WAFScannersProbesSetV6Id:
+    Value: !GetAtt WAFScannersProbesSetV6.Id
+    Condition: ScannersProbesProtectionActivated
+
+  WAFReputationListsSetV6Id:
+    Value: !GetAtt WAFReputationListsSetV6.Id
+    Condition: ReputationListsProtectionActivated
+
+  WAFBadBotSetV6Id:
+    Value: !GetAtt WAFBadBotSetV6.Id
+    Condition: BadBotProtectionActivated
