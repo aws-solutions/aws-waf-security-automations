@@ -2231,7 +2231,7 @@ Resources:
 Outputs:
   BadBotHoneypotEndpoint:
     Description: Bad Bot Honeypot Endpoint
-    Value: !Sub 'https://${ApiGatewayBadBot}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayBadBotStage}'
+    Value: !Sub 'https://${ApiGatewayBadBot}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${ApiGatewayBadBotStage}'
     Condition: BadBotProtectionActivated
 
   WAFWebACL:

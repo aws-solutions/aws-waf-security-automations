@@ -23,8 +23,15 @@ def send_response(log, event, context, responseStatus, responseData, resourceId,
     log.debug("[send_response] Start")
 
     responseUrl = event['ResponseURL']
-    cw_logs_url = "https://console.aws.amazon.com/cloudwatch/home?region=%s#logEventViewer:group=%s;stream=%s" % (
-    context.invoked_function_arn.split(':')[3], context.log_group_name, context.log_stream_name)
+    if (context.invoked_function_arn.split(':')[3]=="cn-north-1"):
+        cw_logs_url = "https://console.amazonaws.cn/cloudwatch/home?region=%s#logEventViewer:group=%s;stream=%s" % (
+            context.invoked_function_arn.split(':')[3], context.log_group_name, context.log_stream_name)
+    elif (context.invoked_function_arn.split(':')[3]=="cn-northwest-1"):
+        cw_logs_url = "https://cn-northwest-1.console.amazonaws.cn/cloudwatch/home?region=%s#logEventViewer:group=%s;stream=%s" % (
+            context.invoked_function_arn.split(':')[3], context.log_group_name, context.log_stream_name)
+    else:
+        cw_logs_url = "https://console.aws.amazon.com/cloudwatch/home?region=%s#logEventViewer:group=%s;stream=%s" % (
+            context.invoked_function_arn.split(':')[3], context.log_group_name, context.log_stream_name)
 
     log.info(responseUrl)
     responseBody = {}
