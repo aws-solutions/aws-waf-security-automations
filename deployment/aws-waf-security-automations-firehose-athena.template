@@ -419,7 +419,7 @@ Resources:
       Type: AWS::Athena::WorkGroup
       Condition: HttpFloodAthenaLogParser
       Properties:
-        Name: WAFLogAthenaQueryWorkGroup
+        Name: !Join ['-', ['WAFLogAthenaQueryWorkGroup', !Ref UUID]]
         Description: Athena WorkGroup for WAF log queries used by AWS WAF Security Automations Solution
         State: ENABLED
         RecursiveDeleteOption: true
@@ -430,7 +430,7 @@ Resources:
       Type: AWS::Athena::WorkGroup
       Condition: ScannersProbesAthenaLogParser
       Properties:
-        Name: WAFAppAccessLogAthenaQueryWorkGroup
+        Name: !Join ['-', ['WAFAppAccessLogAthenaQueryWorkGroup', !Ref UUID]]
         Description: Athena WorkGroup for CloudFront or ALB application access log queries used by AWS WAF Security Automations Solution
         State: ENABLED
         RecursiveDeleteOption: true
