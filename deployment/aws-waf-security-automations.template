@@ -34,6 +34,7 @@ Metadata:
           - ActivateScannersProbesProtectionParam
           - ActivateReputationListsProtectionParam
           - ActivateBadBotProtectionParam
+          - ActivateOversizedObjectProtectionParam
 
       - Label:
           default: Log Monitoring Settings
@@ -73,6 +74,9 @@ Metadata:
 
       ActivateBadBotProtectionParam:
         default: Activate Bad Bot Protection
+
+      ActivateOversizedObjectProtectionParam:
+        default: Activate Oversized Object Protection
 
       EndpointType:
         default: Endpoint Type
@@ -162,6 +166,14 @@ Parameters:
       - 'yes'
       - 'no'
     Description: Choose yes to enable the component designed to block bad bots and content scrapers.
+
+  ActivateOversizedObjectProtectionParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: Choose yes to enable the component designed to block requests bigger than 8kb.
 
   EndpointType:
     Type: String
@@ -299,6 +311,10 @@ Conditions:
     - !Ref ActivateBadBotProtectionParam
     - 'yes'
 
+  OversizedObjectProtectionActivated: !Equals
+    - !Ref ActivateOversizedObjectProtectionParam
+    - 'yes'
+
   AlbEndpoint: !Equals
     - !Ref EndpointType
     - 'ALB'
@@ -405,6 +421,7 @@ Resources:
         ActivateScannersProbesProtectionParam: !Ref ActivateScannersProbesProtectionParam
         ActivateReputationListsProtectionParam: !Ref ActivateReputationListsProtectionParam
         ActivateBadBotProtectionParam: !Ref ActivateBadBotProtectionParam
+        ActivateOversizedObjectProtectionParam: !Ref ActivateOversizedObjectProtectionParam
         RequestThreshold: !Ref RequestThreshold
         RegionScope: !If [AlbEndpoint, 'REGIONAL', 'CLOUDFRONT']
         ParentStackName: !Ref 'AWS::StackName'
@@ -2039,6 +2056,7 @@ Resources:
       ActivateReputationListsProtectionParam: !Ref ActivateReputationListsProtectionParam
       ActivateBadBotProtectionParam: !Ref ActivateBadBotProtectionParam
       ActivateAWSManagedRulesParam: !Ref ActivateAWSManagedRulesParam
+      ActivateOversizedObjectProtectionParam: !Ref ActivateOversizedObjectProtectionParam
       KeepDataInOriginalS3Location: !Ref KeepDataInOriginalS3Location
       IPRetentionPeriodAllowedParam: !Ref IPRetentionPeriodAllowedParam
       IPRetentionPeriodDeniedParam: !Ref IPRetentionPeriodDeniedParam

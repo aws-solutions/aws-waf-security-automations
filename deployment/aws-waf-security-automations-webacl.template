@@ -35,6 +35,8 @@ Parameters:
     Type: String
   ActivateBadBotProtectionParam:
     Type: String
+  ActivateOversizedObjectProtectionParam:
+    Type: String
   RequestThreshold:
     Type: Number
   RegionScope:
@@ -97,6 +99,10 @@ Conditions:
 
   BadBotProtectionActivated: !Equals
     - !Ref ActivateBadBotProtectionParam
+    - 'yes'
+
+  OversizedObjectProtectionActivated: !Equals
+    - !Ref ActivateOversizedObjectProtectionParam
     - 'yes'
 
 Mappings:
@@ -511,6 +517,37 @@ Resources:
                   - IPSetReferenceStatement:
                       Arn: !GetAtt WAFBadBotSetV6.Arn
           - !Ref 'AWS::NoValue'
+        - Name: !Sub '${ParentStackName}OversizedJsonBodyRule'
+          Priority: 8
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'OversizedJsonBodyRule']]
+          Statement:
+            OversizedJsonBodyStatement:
+              FieldToMatch:
+                JsonBody:
+                  MatchPattern:
+                    All: {}
+                  MatchScope: ALL
+                  InvalidFallbackBehavior: EVALUATE_AS_STRING
+                  OversizeHandling: !If [OversizedObjectProtectionActivated, MATCH, NO_MATCH]
+        - Name: !Sub '${ParentStackName}OversizedObjectBodyRule'
+          Priority: 9
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: true
+            CloudWatchMetricsEnabled: true
+            MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'OversizedBodyRule']]
+          Statement:
+            OversizedJsonBodyStatement:
+              FieldToMatch:
+                Body:
+                OversizeHandling: MATCH 
+                  OversizeHandling: !If [OversizedObjectProtectionActivated, MATCH, NO_MATCH]
         - !If
           - SqlInjectionProtectionActivated
           - Name: !Sub '${ParentStackName}SqlInjectionRule'
