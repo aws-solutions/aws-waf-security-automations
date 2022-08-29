@@ -17,13 +17,13 @@ Note: If you want to use the solution without building from source, navigate to 
 <a name="solution-overview"></a>
 # Solution Overview
 
-The AWS DevOps Monitoring Dashboard solution is a reference implementation that automatically deploys a set of AWS WAF (web application firewall) rules that filter common web-based attacks. Users can select from preconfigured protective features that define the rules included in an AWS WAF web access control list (web ACL). Once deployed, AWS WAF protects your Amazon CloudFront distributions or Application Load Balancers by inspecting web requests.
+The Security Automations for AWS WAF solution is a reference implementation that automatically deploys a set of AWS WAF (web application firewall) rules that filter common web-based attacks. Users can select from preconfigured protective features that define the rules included in an AWS WAF web access control list (web ACL). Once deployed, AWS WAF protects your Amazon CloudFront distributions or Application Load Balancers by inspecting web requests.
 
 You can use AWS WAF to create custom, application-specific rules that block attack patterns to ensure application availability, secure resources, and prevent excessive resource consumption.
 
 This solution can be easily installed in your AWS accounts via launching the provided AWS CloudFormation template.
 
-For a detailed solution implementation guide, refer to Solution Landing Page [AWS WAF Security Automations](https://aws.amazon.com/solutions/implementations/aws-waf-security-automations)
+For a detailed solution implementation guide, refer to Solution Landing Page [Security Automations for AWS WAF](https://aws.amazon.com/solutions/implementations/aws-waf-security-automations)
 
 <a name="architecture-diagram"></a>
 # Architecture Diagram
@@ -33,7 +33,7 @@ For a detailed solution implementation guide, refer to Solution Landing Page [AW
   <br/>
 </p>
 
-AWS WAF Security Automations architecture
+Security Automations for AWS WAF architecture
 
 AWS Managed Rules (A): This set of AWS managed core rules provides protection against exploitation of a wide range of common application vulnerabilities or other unwanted traffic.
 
@@ -121,7 +121,7 @@ aws s3 cp ./deployment/regional-s3-assets s3://$DIST_OUTPUT_BUCKET-$AWS_REGION/$
 ## Deploy
 
 * From your designated Amazon S3 bucket where you uploaded the deployment assets, copy the link location for the aws-waf-security-automations.template.
-* Using AWS CloudFormation, launch the AWS WAF Security Automations solution stack using the copied Amazon S3 link for the aws-waf-security-automations.template.
+* Using AWS CloudFormation, launch the Security Automations for AWS WAF solution stack using the copied Amazon S3 link for the aws-waf-security-automations.template.
 
 #### _Note:_ When deploying the template for CloudFront endpoint, you can launch it only from us-east-1 region.
 
