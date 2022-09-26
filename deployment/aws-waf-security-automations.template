@@ -114,9 +114,9 @@ Parameters:
       - 'yes - NO_MATCH'
       - 'no'
     Description: >-
-      Choose yes to enable the component designed to block common SQL injection attacks. You can also select an option you want AWS WAF to handle oversized request exceeding 8 KB (8192 bytes). 
-      By default 'yes' uses CONTINUE option, which inspects the request component contents that are within the size limitations normally according to the rule inspection criteria.
-      For more information, see https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-oversize-handling.html.
+      Choose yes to deploy the default SQL injection protection rule designed to block common SQL injection attacks. 
+      It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
+      your changes will be overwritten after stack update.
 
   SqlInjectionProtectionSensitivityLevelParam:
     Type: String
@@ -125,10 +125,10 @@ Parameters:
       - 'LOW'
       - 'HIGH'
     Description: >-
-      Choose the sensitivity level that you want AWS WAF to use to inspect for SQL injection attacks. HIGH detects more attacks, but might generate more false positives.
-      LOW is generally a better choice for resources that already have other protections against SQL injection attacks or that have a low tolerance for false positives.
-      For more information, see https://aws.amazon.com/about-aws/whats-new/2022/07/aws-waf-sensitivity-levels-sql-injection-rule-statements/. 
+      Choose the sensitivity level used by WAF to inspect for SQL injection attacks. 
       If you choose to deactivate SQL injection protection, ignore this parameter.
+      Note: The stack deploys the default SQL injection protection rule into your AWS account. 
+      If you customized the rule outside of CloudFormation, your changes will be overwritten after stack update. 
 
   ActivateCrossSiteScriptingProtectionParam:
     Type: String
@@ -139,9 +139,9 @@ Parameters:
       - 'yes - NO_MATCH'
       - 'no'
     Description: >-
-      Choose yes to enable the component designed to block common SQL injection attacks. You can also select an option you want AWS WAF to handle oversized request exceeding 8 KB (8192 bytes). 
-      By default 'yes' uses CONTINUE option, which inspects the request component contents that are within the size limitations normally according to the rule inspection criteria.
-      For more information, see https://docs.aws.amazon.com/waf/latest/developerguide/waf-rule-statement-oversize-handling.html.
+      Choose yes to deploy the default cross-site scripting protection rule designed to block common cross-site scripting attacks.
+      It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
+      your changes will be overwritten after stack update. 
 
   ActivateHttpFloodProtectionParam:
     Type: String
