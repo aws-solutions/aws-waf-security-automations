@@ -114,7 +114,7 @@ Parameters:
       - 'yes - NO_MATCH'
       - 'no'
     Description: >-
-      Choose yes to deploy the default SQL injection protection rule designed to block common SQL injection attacks. 
+      Choose yes to deploy the default SQL injection protection rule designed to block common SQL injection attacks.
       It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
       your changes will be overwritten after stack update.
 
@@ -125,10 +125,10 @@ Parameters:
       - 'LOW'
       - 'HIGH'
     Description: >-
-      Choose the sensitivity level used by WAF to inspect for SQL injection attacks. 
+      Choose the sensitivity level used by WAF to inspect for SQL injection attacks.
       If you choose to deactivate SQL injection protection, ignore this parameter.
-      Note: The stack deploys the default SQL injection protection rule into your AWS account. 
-      If you customized the rule outside of CloudFormation, your changes will be overwritten after stack update. 
+      Note: The stack deploys the default SQL injection protection rule into your AWS account.
+      If you customized the rule outside of CloudFormation, your changes will be overwritten after stack update.
 
   ActivateCrossSiteScriptingProtectionParam:
     Type: String
@@ -141,7 +141,7 @@ Parameters:
     Description: >-
       Choose yes to deploy the default cross-site scripting protection rule designed to block common cross-site scripting attacks.
       It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
-      your changes will be overwritten after stack update. 
+      your changes will be overwritten after stack update.
 
   ActivateHttpFloodProtectionParam:
     Type: String
@@ -193,10 +193,10 @@ Parameters:
     Default: ''
     AllowedPattern: '(^$|^([a-z]|(\d(?!\d{0,2}\.\d{1,3}\.\d{1,3}\.\d{1,3})))([a-z\d]|(\.(?!(\.|-)))|(-(?!\.))){1,61}[a-z\d]$)'
     Description: >-
-      If you chose yes for the Activate Scanners & Probes Protection parameter, enter a name for the 
-      Amazon S3 bucket where you want to store access logs for your CloudFront distribution or Application 
-      Load Balancer. More about bucket name restriction here: http://amzn.to/1p1YlU5. 
-      If you chose to deactivate this protection, ignore this parameter. 
+      If you chose yes for the Activate Scanners & Probes Protection parameter, enter a name for the
+      Amazon S3 bucket where you want to store access logs for your CloudFront distribution or Application
+      Load Balancer. More about bucket name restriction here: http://amzn.to/1p1YlU5.
+      If you chose to deactivate this protection, ignore this parameter.
 
   ErrorThreshold:
     Type: Number
@@ -234,7 +234,7 @@ Parameters:
       - 'Yes'
       - 'No'
     Description: >-
-      If you chose Amazon Athena log parser for the Activate Scanners & Probes Protection parameter, 
+      If you chose Amazon Athena log parser for the Activate Scanners & Probes Protection parameter,
       partitioning will be applied to log files and Athena queries. By default log files will be moved
       from their original location to a partitioned folder structure in s3. Choose Yes if you also want
       to keep a copy of the logs in their original location. Selecting "Yes" will duplicate your log
@@ -245,9 +245,9 @@ Parameters:
     Default: -1
     MinValue: -1
     Description: >-
-      If you want to activate IP retention for the Allowed IP set, enter a number (15 or above) as the retention period (minutes). 
-      IP addresses reaching the retention period will expire and be removed from the IP set. A minimum 15-minute retention 
-      period is supported. If you enter a number between 0 and 15, it will be treated as 15. Leave it to default value -1 
+      If you want to activate IP retention for the Allowed IP set, enter a number (15 or above) as the retention period (minutes).
+      IP addresses reaching the retention period will expire and be removed from the IP set. A minimum 15-minute retention
+      period is supported. If you enter a number between 0 and 15, it will be treated as 15. Leave it to default value -1
       to disable IP retention.
 
   IPRetentionPeriodDeniedParam:
@@ -255,9 +255,9 @@ Parameters:
     Default: -1
     MinValue: -1
     Description: >-
-      If you want to activate IP retention for the Denied IP set, enter a number (15 or above) as the retention period (minutes). 
-      IP addresses reaching the retention period will expire and be removed from the IP set. A minimum 15-minute retention 
-      period is supported. If you enter a number between 0 and 15, it will be treated as 15. Leave it to default value -1 
+      If you want to activate IP retention for the Denied IP set, enter a number (15 or above) as the retention period (minutes).
+      IP addresses reaching the retention period will expire and be removed from the IP set. A minimum 15-minute retention
+      period is supported. If you enter a number between 0 and 15, it will be treated as 15. Leave it to default value -1
       to disable IP retention.
 
   SNSEmailParam:
@@ -325,7 +325,7 @@ Conditions:
     - Condition: AthenaLogParser
 
   IPRetentionAllwedPeriod: !Not [!Equals [!Ref IPRetentionPeriodAllowedParam, -1]]
-  
+
   IPRetentionDeniedPeriod: !Not [!Equals [!Ref IPRetentionPeriodDeniedParam, -1]]
 
   IPRetentionPeriod: !Or
@@ -406,7 +406,6 @@ Resources:
         WAFBlockPeriod: !Ref WAFBlockPeriod
         GlueDatabaseName: !If [AthenaLogParser, !GetAtt CreateGlueDatabaseName.DatabaseName, '']
         DeliveryStreamName: !If [HttpFloodProtectionLogParserActivated, !GetAtt CreateDeliveryStreamName.DeliveryStreamName, '']
-        UUID: !GetAtt CreateUniqueID.UUID
 
 
   WebACLStack:
@@ -1081,7 +1080,7 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*AddAthenaPartitions*'
-                
+
   Helper:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -1593,7 +1592,7 @@ Resources:
       Targets:
         - Arn: !GetAtt AddAthenaPartitions.Arn
           Id: LambdaAddAthenaPartitions
-          Input: !Sub 
+          Input: !Sub
             - >-
               {
                 "resourceType": "LambdaAddAthenaPartitionsEventsRule",
@@ -1932,7 +1931,7 @@ Resources:
               Effect: Allow
               Resource:
                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:*'
-    
+
   ApiGatewayBadBotAccount:
       Type: AWS::ApiGateway::Account
       Condition: BadBotProtectionActivated
@@ -2122,7 +2121,7 @@ Resources:
               WAFWebACLMetricName: !GetAtt WebACLStack.Outputs.WAFWebACLMetricName
               RegionMetric: !If [AlbEndpoint, !Sub ', "Region", "${AWS::Region}"', '']
               RegionProperties: !If [AlbEndpoint, !Sub '${AWS::Region}', 'us-east-1']
-  
+
   IPRetentionDDBTable:
     Type: 'AWS::DynamoDB::Table'
     Condition: IPRetentionPeriod
@@ -2158,9 +2157,9 @@ Resources:
     Condition: SNSEmail
     Properties:
       DisplayName: 'AWS WAF Security Automations IP Expiration Notification'
-      TopicName: !Join ['-', ['AWS-WAF-Security-Automations-IP-Expiration-Notification', !GetAtt CreateUniqueID.UUID]]
+      TopicName: !Join ['-', [!Ref AWS::StackName, 'AWS-WAF-Security-Automations-IP-Expiration-Notification']]
       KmsMasterKeyId: alias/aws/sns
-  
+
   IPExpirationEmailNotification:
     Type: AWS::SNS::Subscription
     Condition: SNSEmail
@@ -2168,7 +2167,7 @@ Resources:
       Endpoint: !Ref SNSEmailParam
       Protocol: email
       TopicArn: !Ref IPExpirationSNSTopic
-  
+
   SNSNotificationPolicy:
     Type: AWS::SNS::TopicPolicy
     Condition: SNSEmail
@@ -2215,11 +2214,11 @@ Resources:
               Bool:
                 aws:SecureTransport: 'false'
             Principal: "*"
-  
+
   DDBStreamToLambdaESMapping:
     Type: AWS::Lambda::EventSourceMapping
     Condition: IPRetentionPeriod
-    Properties: 
+    Properties:
       Enabled: true
       EventSourceArn: !GetAtt IPRetentionDDBTable.StreamArn
       FunctionName: !GetAtt RemoveExpiredIP.Arn
@@ -2230,7 +2229,7 @@ Resources:
     Type: AWS::ServiceCatalogAppRegistry::Application
     Properties:
       Description: Service Catalog application to track and manage all your resources for the solution WAF Security Automations. The SolutionID is SO0006 and SolutionVersion is %VERSION%.
-      Name: 
+      Name:
         !Join
           - "-"
           - - !FindInMap [Solution, AppRegistry, "AppRegistryApplicationName"]
@@ -2241,7 +2240,7 @@ Resources:
       'Solutions:SolutionID': !FindInMap [Solution, Data, "SolutionID"],
       'Solutions:SolutionVersion': "%VERSION%",
       'Solutions:SolutionName': !FindInMap [Solution, AppRegistry, "SolutionName"],
-      'Solutions:ApplicationType': 'AWS-Solutions', 
+      'Solutions:ApplicationType': 'AWS-Solutions',
       }
 
   AppRegistryApplicationStackAssociation:
@@ -2256,7 +2255,7 @@ Resources:
     Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
     Properties:
       Application: !GetAtt Application.Id
-      Resource: 
+      Resource:
         !Ref WebACLStack
       ResourceType: CFN_STACK
 
@@ -2265,7 +2264,7 @@ Resources:
     Condition: CreateFirehoseAthenaStack
     Properties:
       Application: !GetAtt Application.Id
-      Resource: 
+      Resource:
         !Ref FirehoseAthenaStack
       ResourceType: CFN_STACK
 
@@ -2274,7 +2273,7 @@ Resources:
     Properties:
       Name: !Ref AWS::StackName
       Description: Attribute group for solution information.
-      Attributes:       
+      Attributes:
         { "ApplicationType" : 'AWS-Solutions',
           "Version": "%VERSION%",
           "SolutionID": !FindInMap [Solution, Data, "SolutionID"],
