@@ -2272,7 +2272,7 @@ Resources:
   DefaultApplicationAttributes:
     Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
     Properties:
-      Name: !Ref AWS::StackName
+      Name: !Sub '${AWS::Region}-${AWS::StackName}'
       Description: Attribute group for solution information.
       Attributes:       
         { "ApplicationType" : 'AWS-Solutions',
