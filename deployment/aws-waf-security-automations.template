@@ -2111,15 +2111,15 @@ Resources:
                     "stat": "Sum",
                     "period": 300,
                     "metrics": [
-                      ["WAF", "BlockedRequests", "WebACL", "${WAFWebACLMetricName}", "Rule", "ALL" ${RegionMetric}],
-                      ["WAF", "AllowedRequests", "WebACL", "${WAFWebACLMetricName}", "Rule", "ALL" ${RegionMetric}]
+                      ["AWS/WAFV2", "BlockedRequests", "WebACL", "${WAFWebACLName}", "Rule", "ALL" ${RegionMetric}],
+                      ["AWS/WAFV2", "AllowedRequests", "WebACL", "${WAFWebACLName}", "Rule", "ALL" ${RegionMetric}]
                     ],
                     "region": "${RegionProperties}"
                   }
                 }]
               }
             -
-              WAFWebACLMetricName: !GetAtt WebACLStack.Outputs.WAFWebACLMetricName
+              WAFWebACLName: !Select [0, !Split ["|", !GetAtt WebACLStack.Outputs.WAFWebACL ]]
               RegionMetric: !If [AlbEndpoint, !Sub ', "Region", "${AWS::Region}"', '']
               RegionProperties: !If [AlbEndpoint, !Sub '${AWS::Region}', 'us-east-1']
   
