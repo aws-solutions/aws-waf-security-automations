@@ -1,15 +1,5 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License").
-# You may not use this file except in compliance with the License.
-# A copy of the License is located at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# or in the "license" file accompanying this file. This file is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-# express or implied. See the License for the specific language governing
-# permissions and limitations under the License.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
@@ -29,6 +19,7 @@ Metadata:
         Parameters:
           - ActivateAWSManagedRulesParam
           - ActivateSqlInjectionProtectionParam
+          - SqlInjectionProtectionSensitivityLevelParam
           - ActivateCrossSiteScriptingProtectionParam
           - ActivateHttpFloodProtectionParam
           - ActivateScannersProbesProtectionParam
@@ -58,6 +49,9 @@ Metadata:
 
       ActivateSqlInjectionProtectionParam:
         default: Activate SQL Injection Protection
+
+      SqlInjectionProtectionSensitivityLevelParam:
+        default: Sensitivity Level for SQL Injection Protection
 
       ActivateCrossSiteScriptingProtectionParam:
         default: Activate Cross-site Scripting Protection
@@ -101,6 +95,7 @@ Metadata:
       SNSEmailParam:
         default: Email for receiving notifcation upon Allowed or Denied IP Sets expiration
 
+
 Parameters:
   ActivateAWSManagedRulesParam:
     Type: String
@@ -115,16 +110,38 @@ Parameters:
     Default: 'yes'
     AllowedValues:
       - 'yes'
+      - 'yes - MATCH'
+      - 'yes - NO_MATCH'
       - 'no'
-    Description: Choose yes to enable the component designed to block common SQL injection attacks.
+    Description: >-
+      Choose yes to deploy the default SQL injection protection rule designed to block common SQL injection attacks. 
+      It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
+      your changes will be overwritten after stack update.
+
+  SqlInjectionProtectionSensitivityLevelParam:
+    Type: String
+    Default: 'LOW'
+    AllowedValues:
+      - 'LOW'
+      - 'HIGH'
+    Description: >-
+      Choose the sensitivity level used by WAF to inspect for SQL injection attacks. 
+      If you choose to deactivate SQL injection protection, ignore this parameter.
+      Note: The stack deploys the default SQL injection protection rule into your AWS account. 
+      If you customized the rule outside of CloudFormation, your changes will be overwritten after stack update. 
 
   ActivateCrossSiteScriptingProtectionParam:
     Type: String
     Default: 'yes'
     AllowedValues:
       - 'yes'
+      - 'yes - MATCH'
+      - 'yes - NO_MATCH'
       - 'no'
-    Description: Choose yes to enable the component designed to block common XSS attacks.
+    Description: >-
+      Choose yes to deploy the default cross-site scripting protection rule designed to block common cross-site scripting attacks.
+      It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
+      your changes will be overwritten after stack update. 
 
   ActivateHttpFloodProtectionParam:
     Type: String
@@ -347,6 +364,10 @@ Mappings:
             QueryScheduledRunTime: 5   # by default athena query runs every 5 minutes, update it if needed
         UserAgent:
             UserAgentExtra: 'AwsSolution/SO0006/%VERSION%'
+        AppRegistry:
+             AppRegistryApplicationName: 'waf-security-automations'
+             SolutionName: 'WAF Security Automations'
+
 
 Resources:
   CheckRequirements:
@@ -401,6 +422,7 @@ Resources:
         ActivateAWSManagedRulesParam: !Ref ActivateAWSManagedRulesParam
         ActivateSqlInjectionProtectionParam: !Ref ActivateSqlInjectionProtectionParam
         ActivateCrossSiteScriptingProtectionParam: !Ref ActivateCrossSiteScriptingProtectionParam
+        SqlInjectionProtectionSensitivityLevelParam: !Ref SqlInjectionProtectionSensitivityLevelParam
         ActivateHttpFloodProtectionParam: !Ref ActivateHttpFloodProtectionParam
         ActivateScannersProbesProtectionParam: !Ref ActivateScannersProbesProtectionParam
         ActivateReputationListsProtectionParam: !Ref ActivateReputationListsProtectionParam
@@ -412,7 +434,6 @@ Resources:
         GlueAppAccessLogsTable: !If [ScannersProbesAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueAppAccessLogsTable, '']
         GlueWafAccessLogsTable: !If [HttpFloodAthenaLogParser, !GetAtt FirehoseAthenaStack.Outputs.GlueWafAccessLogsTable,'']
         LogLevel: !FindInMap ["Solution", "Data", "LogLevel"]
-
 
 
   LambdaRoleHelper:
@@ -1307,12 +1328,6 @@ Resources:
   LogParser:
     Type: 'AWS::Lambda::Function'
     Condition: LogParser
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W58
-            reason: "Log permissions are defined in the LambdaRoleLogParser policies"
     Properties:
       Description: >-
             This function parses access logs to identify suspicious behavior, such as an abnormal amount of errors.
@@ -1360,16 +1375,12 @@ Resources:
           reason: There is no need to run this lambda in a VPC
         - id: W92
           reason: There is no need for Reserved Concurrency
+        - id: W58
+          reason: "Log permissions are defined in the LambdaRoleLogParser policies"
 
   MoveS3LogsForPartition:
     Type: 'AWS::Lambda::Function'
     Condition: ScannersProbesAthenaLogParser
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W58
-            reason: "Log permissions are defined in the LambdaRolePartitionS3Logs policies"
     Properties:
       Description: >-
             This function is triggered by S3 event to move log files(upon their arrival in s3) from their original location
@@ -1396,16 +1407,12 @@ Resources:
           reason: There is no need to run this lambda in a VPC
         - id: W92
           reason: There is no need for Reserved Concurrency
+        - id: W58
+          reason: "Log permissions are defined in the LambdaRolePartitionS3Logs policies"
 
   AddAthenaPartitions:
     Type: 'AWS::Lambda::Function'
     Condition: AthenaLogParser
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W58
-            reason: "Log permissions are defined in the LambdaRoleAddAthenaPartitions policies"
     Properties:
       Description: >-
             This function adds a new hourly partition to athena table.
@@ -1429,6 +1436,8 @@ Resources:
           reason: There is no need to run this lambda in a VPC
         - id: W92
           reason: There is no need for Reserved Concurrency
+        - id: W58
+          reason: "Log permissions are defined in the LambdaRoleAddAthenaPartitions policies"
 
   SetIPRetention:
     Type: 'AWS::Lambda::Function'
@@ -1644,12 +1653,6 @@ Resources:
   ReputationListsParser:
     Type: 'AWS::Lambda::Function'
     Condition: ReputationListsProtectionActivated
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W58
-            reason: "Log permissions are defined in the LambdaRoleReputationListsParser policies"
     Properties:
       Description: >-
         This lambda function checks third-party IP reputation lists hourly for new IP ranges to
@@ -1686,6 +1689,8 @@ Resources:
           reason: There is no need to run this lambda in a VPC
         - id: W92
           reason: There is no need for Reserved Concurrency
+        - id: W58
+          reason: "Log permissions are defined in the LambdaRoleReputationListsParser policies"
 
 
   ReputationListsParserEventsRule:
@@ -1738,12 +1743,6 @@ Resources:
   BadBotParser:
     Type: 'AWS::Lambda::Function'
     Condition: BadBotProtectionActivated
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W58
-            reason: "Log permissions are defined in the LambdaRoleBadBot policies"
     Properties:
       Description: >-
         This lambda function will intercepts and inspects trap endpoint requests to extract its IP
@@ -1780,6 +1779,8 @@ Resources:
           reason: There is no need to run this lambda in a VPC
         - id: W92
           reason: There is no need for Reserved Concurrency
+        - id: W58
+          reason: "Log permissions are defined in the LambdaRoleBadBot policies"
 
   LambdaInvokePermissionBadBot:
     Type: 'AWS::Lambda::Permission'
@@ -1942,12 +1943,6 @@ Resources:
 
   CustomResource:
     Type: 'AWS::Lambda::Function'
-    Metadata:
-      cfn_nag:
-        rules_to_suppress:
-          -
-            id: W58
-            reason: "Log permissions are defined in the LambdaRoleCustomResource policies"
     Properties:
       Description: >-
         This lambda function configures the Web ACL rules based on the features enabled in the
@@ -1974,6 +1969,8 @@ Resources:
           reason: There is no need to run this lambda in a VPC
         - id: W92
           reason: There is no need for Reserved Concurrency
+        - id: W58
+          reason: "Log permissions are defined in the LambdaRoleCustomResource policies"
 
   ConfigureAWSWAFLogs:
     Type: 'Custom::ConfigureAWSWAFLogs'
@@ -2227,6 +2224,68 @@ Resources:
       EventSourceArn: !GetAtt IPRetentionDDBTable.StreamArn
       FunctionName: !GetAtt RemoveExpiredIP.Arn
       StartingPosition: LATEST
+
+  # AppRegistry Application
+  Application:
+    Type: AWS::ServiceCatalogAppRegistry::Application
+    Properties:
+      Description: Service Catalog application to track and manage all your resources for the solution WAF Security Automations. The SolutionID is SO0006 and SolutionVersion is %VERSION%.
+      Name: 
+        !Join
+          - "-"
+          - - !FindInMap [Solution, AppRegistry, "AppRegistryApplicationName"]
+            - !Ref AWS::Region
+            - !Ref AWS::AccountId
+            - !Ref AWS::StackName
+      Tags: {
+      'Solutions:SolutionID': !FindInMap [Solution, Data, "SolutionID"],
+      'Solutions:SolutionVersion': "%VERSION%",
+      'Solutions:SolutionName': !FindInMap [Solution, AppRegistry, "SolutionName"],
+      'Solutions:ApplicationType': 'AWS-Solutions', 
+      }
+
+  AppRegistryApplicationStackAssociation:
+    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Properties:
+      Application: !GetAtt Application.Id
+      Resource:
+        !Ref AWS::StackId
+      ResourceType: CFN_STACK
+
+  AppRegistryApplicationStackAssociationNestedStackWebACL:
+    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Properties:
+      Application: !GetAtt Application.Id
+      Resource: 
+        !Ref WebACLStack
+      ResourceType: CFN_STACK
+
+  AppRegistryApplicationStackAssociationNestedStackFirehoseAthena:
+    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Condition: CreateFirehoseAthenaStack
+    Properties:
+      Application: !GetAtt Application.Id
+      Resource: 
+        !Ref FirehoseAthenaStack
+      ResourceType: CFN_STACK
+
+  DefaultApplicationAttributes:
+    Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
+    Properties:
+      Name: !Sub '${AWS::Region}-${AWS::StackName}'
+      Description: Attribute group for solution information.
+      Attributes:       
+        { "ApplicationType" : 'AWS-Solutions',
+          "Version": "%VERSION%",
+          "SolutionID": !FindInMap [Solution, Data, "SolutionID"],
+          "SolutionName": !FindInMap [Solution, AppRegistry, "SolutionName"]
+        }
+
+  AppRegistryApplicationAttributeAssociation:
+    Type: AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation
+    Properties:
+      Application: !GetAtt Application.Id
+      AttributeGroup: !GetAtt DefaultApplicationAttributes.Id
 
 Outputs:
   BadBotHoneypotEndpoint:

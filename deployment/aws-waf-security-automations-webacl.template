@@ -1,15 +1,5 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License").
-# You may not use this file except in compliance with the License.
-# A copy of the License is located at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# or in the "license" file accompanying this file. This file is distributed
-# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
-# express or implied. See the License for the specific language governing
-# permissions and limitations under the License.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
@@ -49,19 +39,41 @@ Parameters:
     Type: String
   LogLevel:
     Type: String
+  SqlInjectionProtectionSensitivityLevelParam:
+    Type: String
 
 Conditions:
   AWSManagedRulesActivated: !Equals
     - !Ref ActivateAWSManagedRulesParam
     - 'yes'
+    
+  SqlInjectionProtectionActivated:  !Not [!Equals [!Ref ActivateSqlInjectionProtectionParam, 'no']]
 
-  SqlInjectionProtectionActivated: !Equals
+  CrossSiteScriptingProtectionActivated: !Not [!Equals [!Ref ActivateCrossSiteScriptingProtectionParam, 'no']]
+
+  SqlInjectionProtectionContinueActivated: !Equals
     - !Ref ActivateSqlInjectionProtectionParam
     - 'yes'
 
-  CrossSiteScriptingProtectionActivated: !Equals
+  SqlInjectionProtectionMatchActivated: !Equals
+    - !Ref ActivateSqlInjectionProtectionParam
+    - 'yes - MATCH'
+
+  SqlInjectionProtectionNoMatchActivated: !Equals
+    - !Ref ActivateSqlInjectionProtectionParam
+    - 'yes - NO_MATCH'
+
+  CrossSiteScriptingProtectionContinueActivated: !Equals
     - !Ref ActivateCrossSiteScriptingProtectionParam
     - 'yes'
+
+  CrossSiteScriptingProtectionMatchActivated: !Equals
+    - !Ref ActivateCrossSiteScriptingProtectionParam
+    - 'yes - MATCH'
+
+  CrossSiteScriptingProtectionNoMatchActivated: !Equals
+    - !Ref ActivateCrossSiteScriptingProtectionParam
+    - 'yes - NO_MATCH'
 
   HttpFloodProtectionRateBasedRuleActivated: !Equals
     - !Ref ActivateHttpFloodProtectionParam
@@ -532,14 +544,23 @@ Resources:
                           Type: URL_DECODE
                         - Priority: 2
                           Type: HTML_ENTITY_DECODE
+                      SensitivityLevel: !Ref SqlInjectionProtectionSensitivityLevelParam
                   - SqliMatchStatement:
                       FieldToMatch:
-                        Body: {}
+                        Body: 
+                          # Select the option based on user input
+                          OversizeHandling:
+                            !If [SqlInjectionProtectionContinueActivated, 'CONTINUE', 
+                              !If [SqlInjectionProtectionMatchActivated, 'MATCH', 
+                                !If [SqlInjectionProtectionNoMatchActivated, 'NO_MATCH', 'CONTINUE']
+                              ]
+                            ]
                       TextTransformations:
                         - Priority: 1
                           Type: URL_DECODE
                         - Priority: 2
                           Type: HTML_ENTITY_DECODE
+                      SensitivityLevel: !Ref SqlInjectionProtectionSensitivityLevelParam
                   - SqliMatchStatement:
                       FieldToMatch:
                         UriPath: {}
@@ -548,6 +569,7 @@ Resources:
                           Type: URL_DECODE
                         - Priority: 2
                           Type: HTML_ENTITY_DECODE
+                      SensitivityLevel: !Ref SqlInjectionProtectionSensitivityLevelParam
                   - SqliMatchStatement:
                       FieldToMatch:
                         SingleHeader: {Name: "Authorization"}
@@ -556,6 +578,7 @@ Resources:
                           Type: URL_DECODE
                         - Priority: 2
                           Type: HTML_ENTITY_DECODE
+                      SensitivityLevel: !Ref SqlInjectionProtectionSensitivityLevelParam
                   - SqliMatchStatement:
                       FieldToMatch:
                         SingleHeader: {Name: "Cookie"}
@@ -564,6 +587,7 @@ Resources:
                           Type: URL_DECODE
                         - Priority: 2
                           Type: HTML_ENTITY_DECODE
+                      SensitivityLevel: !Ref SqlInjectionProtectionSensitivityLevelParam
           - !Ref 'AWS::NoValue'
         - !If
           - CrossSiteScriptingProtectionActivated
@@ -588,7 +612,14 @@ Resources:
                           Type: HTML_ENTITY_DECODE
                   - XssMatchStatement:
                       FieldToMatch:
-                        Body: {}
+                        Body: 
+                          OversizeHandling:
+                            # Select the option based on user input
+                            !If [CrossSiteScriptingProtectionContinueActivated, 'CONTINUE', 
+                              !If [CrossSiteScriptingProtectionMatchActivated, 'MATCH', 
+                                !If [CrossSiteScriptingProtectionNoMatchActivated, 'NO_MATCH', 'CONTINUE']
+                              ]
+                            ]
                       TextTransformations:
                         - Priority: 1
                           Type: URL_DECODE
