@@ -201,7 +201,8 @@ def send_response(log, event, context, responseStatus, responseData, resourceId,
     try:
         response = requests.put(responseUrl,
                                 data=json_responseBody,
-                                headers=headers)
+                                headers=headers,
+                                timeout=600)
         log.debug("Status code: " + response.reason)
 
     except Exception as error:
