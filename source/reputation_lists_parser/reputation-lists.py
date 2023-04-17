@@ -44,7 +44,7 @@ def find_ips(line, prefix=""):
 def read_url_list(log, current_list, url, prefix=""):
     try:
         log.info("[read_url_list]reading url " + url)
-        file = requests.get(url)
+        file = requests.get(url, timeout=600)
         new_ip_count = 0
         line_count = 0
         current_ip_count = len(current_list)
@@ -149,7 +149,8 @@ def send_response(log, event, context, responseStatus, responseData, resourceId,
     try:
         response = requests.put(responseUrl,
                                 data=json_responseBody,
-                                headers=headers)
+                                headers=headers,
+                                timeout=600)
         log.debug("Status code: " + response.reason)
 
     except Exception as error:

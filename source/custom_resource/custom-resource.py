@@ -125,7 +125,7 @@ def put_s3_bucket_access_logging(log, s3_client, bucket_name, access_logging_buc
             BucketLoggingStatus={
                 'LoggingEnabled': {
                     'TargetBucket': access_logging_bucket_name,
-                    'TargetPrefix': 'AppAccess_Logs'
+                    'TargetPrefix': 'AppAccess_Logs/'
                 }
             }
         )
@@ -423,7 +423,8 @@ def send_response(log, event, context, responseStatus, responseData, resourceId,
     try:
         response = requests.put(responseUrl,
                                 data=json_responseBody,
-                                headers=headers)
+                                headers=headers,
+                                timeout=600)
         log.debug("Status code: " + response.reason)
 
     except Exception as error:

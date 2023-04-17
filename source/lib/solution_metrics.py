@@ -46,7 +46,7 @@ def send_metrics(data,
             }
         json_data = dumps(metrics_data)
         headers = {'content-type': 'application/json'}
-        response = requests.post(url, data=json_data, headers=headers)
+        response = requests.post(url, data=json_data, headers=headers, timeout=300)
         return response
     except Exception as e:
         log.error("[solution_metrics:send_metrics] Failed to send solution metrics.")

@@ -1289,7 +1289,6 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
-      AccessControl: LogDeliveryWrite
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -1323,6 +1322,22 @@ Resources:
             - !GetAtt AccessLoggingBucket.Arn
             - !Join ["/", [!GetAtt AccessLoggingBucket.Arn, "*"]]
           Sid: HttpsOnly
+        - Sid: S3ServerAccessLogsPolicy
+          Effect: Allow
+          Principal:
+            Service: logging.s3.amazonaws.com
+          Action:
+          - s3:PutObject
+          Resource: 
+            - !GetAtt AccessLoggingBucket.Arn
+            - !Join ["/", [!GetAtt AccessLoggingBucket.Arn, "*"]]
+          Condition:
+            ArnLike:
+              aws:SourceArn:
+              - !If [HttpFloodProtectionLogParserActivated, !GetAtt WafLogBucket.Arn, !GetAtt AccessLoggingBucket.Arn]
+              - !Join ["", ["arn:aws:s3:::", !Ref AppAccessLogBucket]]
+            StringEquals:
+              aws:SourceAccount: !Ref 'AWS::AccountId'
         Version: '2012-10-17'
 
   LogParser:
