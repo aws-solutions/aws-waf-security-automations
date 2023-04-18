@@ -1289,6 +1289,9 @@ Resources:
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
     Properties:
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: ObjectWriter
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
