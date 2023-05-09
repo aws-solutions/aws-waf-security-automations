@@ -1,5 +1,5 @@
 ######################################################################################################################
-#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.                                           #
 #                                                                                                                    #
 #  Licensed under the Apache License, Version 2.0 (the "License"). You may not use this file except in compliance    #
 #  with the License. A copy of the License is located at                                                             #
@@ -97,17 +97,19 @@ class WAFLIBv2(object):
             log.error(str(e))
             return None
 
-    # Retrieve addresses based on ip_set_id
+    # Get the count of ip addresses based on ip set arn
     @on_exception(expo, client.exceptions.WAFInternalErrorException, max_time=MAX_TIME)
-    def get_addresses(self, log, scope, name, arn):
+    def get_ip_address_count(self, log, scope, name, arn):
         try:
             response = self.get_ip_set(log, scope, name, arn)
-            addresses = response["IPSet"]["Addresses"]
-            return addresses
+            log.info(response)
+            ip_count = len(response['IPSet']['Addresses']) if response is not None else 0
+            log.info("%s IP address count: %s" %(name, str(ip_count)))
+            return ip_count
         except Exception as e:
-            log.error("Failed to get addresses for ARN %s", str(arn))
+            log.error("Failed to get the count of IP address for ARN %s", str(arn))
             log.error(str(e))
-            return None
+            return 0
 
     # Update addresses in an IPSet using ip set id
     @on_exception(expo, client.exceptions.WAFOptimisticLockException,
@@ -236,35 +238,6 @@ class WAFLIBv2(object):
             log.error("Failed to list WebAcld in scope: %s", str(scope))
             log.error(str(e))
             return None
-            
-    # log when retry is stopped
-    # def give_up_retry(self, log, e):
-    #     log.error("Giving up retry after %s times.",str(API_CALL_NUM_RETRIES))
-    #     log.error(e)
-        
-    #################################################################
-    # Following functions only used for testing, not in WAF Solution
-    #################################################################
-
-    @on_exception(expo,
-                  (client.exceptions.WAFInternalErrorException,
-                   client.exceptions.WAFOptimisticLockException,
-                   client.exceptions.WAFLimitsExceededException),
-                  max_time=MAX_TIME)
-    def create_ip_set(self, log, scope, name, description, version, addresses):
-        try:
-            response = client.create_ip_set(
-                Scope=scope,
-                Name=name,
-                Description=description,
-                IPAddressVersion=version,
-                Addresses=addresses
-            )
-            return response
-        except Exception as e:
-            log.error("Failed to create IPSet: %s", str(name))
-            log.error(str(e))
-            return None
 
     @on_exception(expo,
                   (client.exceptions.WAFInternalErrorException,
@@ -285,26 +258,5 @@ class WAFLIBv2(object):
             return response
         except Exception as e:
             log.error("Failed to delete IPSet: %s", str(name))
-            log.error(str(e))
-            return None
-
-    @on_exception(expo, client.exceptions.WAFInternalErrorException, max_time=MAX_TIME)
-    def list_ip_sets(self, log, scope, marker=None):
-        try:
-            response = None
-            if marker == None:
-                response = client.list_ip_sets(
-                    Scope=scope,
-                    Limit=50
-                )
-            else:
-                response = client.list_ip_sets(
-                    Scope=scope,
-                    NextMarker=marker,
-                    Limit=50
-                )
-            return response
-        except Exception as e:
-            log.error("Failed to list IPSets in scope: %s", str(scope))
             log.error(str(e))
             return None

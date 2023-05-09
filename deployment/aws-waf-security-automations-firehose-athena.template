@@ -1,4 +1,4 @@
-# Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License").
 # You may not use this file except in compliance with the License.
@@ -13,8 +13,8 @@
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-FA) - AWS WAF Security Automations - FA %VERSION%: This AWS CloudFormation template helps
-  you provision the AWS WAF Security Automations stack without worrying about creating and
+  (SO0006-FA) - Security Automations for AWS WAF - FA %VERSION%: This AWS CloudFormation template helps
+  you provision the Security Automations for AWS WAF stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
   **WARNING** This template creates an AWS Lambda function, an AWS WAF Web ACL, an Amazon S3 bucket,
@@ -409,7 +409,7 @@ Resources:
       Condition: AthenaLogParser
       Properties:
         Name: !Join ['-', ['WAFAddPartitionAthenaQueryWorkGroup', !Ref UUID]]
-        Description: Athena WorkGroup for adding Athena partition queries used by AWS WAF Security Automations Solution
+        Description: Athena WorkGroup for adding Athena partition queries used by Security Automations for AWS WAF Solution
         State: ENABLED
         RecursiveDeleteOption: true
         WorkGroupConfiguration:
@@ -419,8 +419,8 @@ Resources:
       Type: AWS::Athena::WorkGroup
       Condition: HttpFloodAthenaLogParser
       Properties:
-        Name: WAFLogAthenaQueryWorkGroup
-        Description: Athena WorkGroup for WAF log queries used by AWS WAF Security Automations Solution
+        Name: !Join ['-', ['WAFLogAthenaQueryWorkGroup', !Ref UUID]]
+        Description: Athena WorkGroup for WAF log queries used by Security Automations for AWS WAF Solution
         State: ENABLED
         RecursiveDeleteOption: true
         WorkGroupConfiguration:
@@ -430,8 +430,8 @@ Resources:
       Type: AWS::Athena::WorkGroup
       Condition: ScannersProbesAthenaLogParser
       Properties:
-        Name: WAFAppAccessLogAthenaQueryWorkGroup
-        Description: Athena WorkGroup for CloudFront or ALB application access log queries used by AWS WAF Security Automations Solution
+        Name: !Join ['-', ['WAFAppAccessLogAthenaQueryWorkGroup', !Ref UUID]]
+        Description: Athena WorkGroup for CloudFront or ALB application access log queries used by Security Automations for AWS WAF Solution
         State: ENABLED
         RecursiveDeleteOption: true
         WorkGroupConfiguration:
@@ -455,17 +455,17 @@ Outputs:
     Value: !If [AlbEndpoint, !Ref ALBGlueAppAccessLogsTable, !Ref CloudFrontGlueAppAccessLogsTable]
 
   WAFAddPartitionAthenaQueryWorkGroup:
-    Description: Athena WorkGroup for adding Athena partition queries used by AWS WAF Security Automations Solution
+    Description: Athena WorkGroup for adding Athena partition queries used by Security Automations for AWS WAF Solution
     Value: !Ref WAFAddPartitionAthenaQueryWorkGroup
     Condition: AthenaLogParser
 
   WAFLogAthenaQueryWorkGroup:
-    Description: Athena WorkGroup for WAF log queries used by AWS WAF Security Automations Solution
+    Description: Athena WorkGroup for WAF log queries used by Security Automations for AWS WAF Solution
     Value: !Ref WAFLogAthenaQueryWorkGroup
     Condition: HttpFloodAthenaLogParser
 
   WAFAppAccessLogAthenaQueryWorkGroup:
-    Description: Athena WorkGroup for CloudFront or ALB application access log queries used by AWS WAF Security Automations Solution
+    Description: Athena WorkGroup for CloudFront or ALB application access log queries used by Security Automations for AWS WAF Solution
     Value: !Ref WAFAppAccessLogAthenaQueryWorkGroup
     Condition: ScannersProbesAthenaLogParser
 

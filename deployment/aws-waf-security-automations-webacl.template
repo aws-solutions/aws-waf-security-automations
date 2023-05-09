@@ -3,8 +3,8 @@
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-WebACL) - AWS WAF Security Automations %VERSION%: This AWS CloudFormation template helps
-  you provision the AWS WAF Security Automations stack without worrying about creating and
+  (SO0006-WebACL) - Security Automations for AWS WAF %VERSION%: This AWS CloudFormation template helps
+  you provision the Security Automations for AWS WAF stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
   **WARNING** This template creates an AWS WAF Web ACL and Amazon CloudWatch custom metrics.
@@ -12,6 +12,26 @@ Description: >-
 
 Parameters:
   ActivateAWSManagedRulesParam:
+    Type: String
+  ActivateAWSManagedAPParam:
+    Type: String
+  ActivateAWSManagedKBIParam:
+    Type: String
+  ActivateAWSManagedIPRParam:
+    Type: String
+  ActivateAWSManagedAIPParam:
+    Type: String
+  ActivateAWSManagedSQLParam:
+    Type: String
+  ActivateAWSManagedLinuxParam:
+    Type: String
+  ActivateAWSManagedPOSIXParam:
+    Type: String
+  ActivateAWSManagedWindowsParam:
+    Type: String
+  ActivateAWSManagedPHPParam:
+    Type: String
+  ActivateAWSManagedWPParam:
     Type: String
   ActivateSqlInjectionProtectionParam:
     Type: String
@@ -43,10 +63,50 @@ Parameters:
     Type: String
 
 Conditions:
-  AWSManagedRulesActivated: !Equals
+  AWSManagedCRSActivated: !Equals
     - !Ref ActivateAWSManagedRulesParam
     - 'yes'
-    
+
+  AWSManagedAPActivated: !Equals
+    - !Ref ActivateAWSManagedAPParam
+    - 'yes'
+
+  AWSManagedKBIActivated: !Equals
+    - !Ref ActivateAWSManagedKBIParam
+    - 'yes'
+
+  AWSManagedIPRActivated: !Equals
+    - !Ref ActivateAWSManagedIPRParam
+    - 'yes'
+
+  AWSManagedAIPActivated: !Equals
+    - !Ref ActivateAWSManagedAIPParam
+    - 'yes'
+
+  AWSManagedSQLActivated: !Equals
+    - !Ref ActivateAWSManagedSQLParam
+    - 'yes'
+
+  AWSManagedLinuxActivated: !Equals
+    - !Ref ActivateAWSManagedLinuxParam
+    - 'yes'
+
+  AWSManagedPOSIXActivated: !Equals
+    - !Ref ActivateAWSManagedPOSIXParam
+    - 'yes'
+
+  AWSManagedWindowsActivated: !Equals
+    - !Ref ActivateAWSManagedWindowsParam
+    - 'yes'
+
+  AWSManagedPHPActivated: !Equals
+    - !Ref ActivateAWSManagedPHPParam
+    - 'yes'
+
+  AWSManagedWPActivated: !Equals
+    - !Ref ActivateAWSManagedWPParam
+    - 'yes'
+
   SqlInjectionProtectionActivated:  !Not [!Equals [!Ref ActivateSqlInjectionProtectionParam, 'no']]
 
   CrossSiteScriptingProtectionActivated: !Not [!Equals [!Ref ActivateCrossSiteScriptingProtectionParam, 'no']]
@@ -361,7 +421,7 @@ Resources:
       Code:
         S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
         S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'timer.zip']]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 128
       Timeout: 300
       Environment:
@@ -392,9 +452,9 @@ Resources:
         Allow: {}
       Rules:
         - !If
-          - AWSManagedRulesActivated
+          - AWSManagedCRSActivated
           - Name: AWS-AWSManagedRulesCommonRuleSet
-            Priority: 0
+            Priority: 6
             OverrideAction:
               None: {}
             VisibilityConfig:
@@ -406,8 +466,158 @@ Resources:
                 VendorName: AWS
                 Name: AWSManagedRulesCommonRuleSet
           - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedAPActivated
+          - Name: AWS-AWSManagedRulesAdminProtectionRuleSet
+            Priority: 7
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRAP']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAdminProtectionRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedKBIActivated
+          - Name: AWS-AWSManagedRulesKnownBadInputsRuleSet
+            Priority: 8
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRKBI']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesKnownBadInputsRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedIPRActivated
+          - Name: AWS-AWSManagedRulesAmazonIpReputationList
+            Priority: 2
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRIPR']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAmazonIpReputationList
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedAIPActivated
+          - Name: AWS-AWSManagedRulesAnonymousIpList
+            Priority: 4
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRAIP']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesAnonymousIpList
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedSQLActivated
+          - Name: AWS-AWSManagedRulesSQLiRuleSet
+            Priority: 14
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRSQL']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesSQLiRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedLinuxActivated
+          - Name: AWS-AWSManagedRulesLinuxRuleSet
+            Priority: 11
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRLinux']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesLinuxRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedPOSIXActivated
+          - Name: AWS-AWSManagedRulesUnixRuleSet
+            Priority: 10
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRPOSIX']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesUnixRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedWindowsActivated
+          - Name: AWS-AWSManagedRulesWindowsRuleSet
+            Priority: 9
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRWindows']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesWindowsRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedPHPActivated
+          - Name: AWS-AWSManagedRulesPHPRuleSet
+            Priority: 12
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRPHP']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesPHPRuleSet
+          - !Ref 'AWS::NoValue'
+        - !If
+          - AWSManagedWPActivated
+          - Name: AWS-AWSManagedRulesWordPressRuleSet
+            Priority: 13
+            OverrideAction:
+              None: {}
+            VisibilityConfig:
+              SampledRequestsEnabled: true
+              CloudWatchMetricsEnabled: true
+              MetricName: !Join ['', [!Join ['', !Split ['-', !Ref ParentStackName]], 'AMRWP']]
+            Statement:
+              ManagedRuleGroupStatement:
+                VendorName: AWS
+                Name: AWSManagedRulesWordPressRuleSet
+          - !Ref 'AWS::NoValue'
         - Name: !Sub '${ParentStackName}WhitelistRule'
-          Priority: 1
+          Priority: 0
           Action:
             Allow: {}
           VisibilityConfig:
@@ -422,7 +632,7 @@ Resources:
                 - IPSetReferenceStatement:
                     Arn: !GetAtt WAFWhitelistSetV6.Arn
         - Name: !Sub '${ParentStackName}BlacklistRule'
-          Priority: 2
+          Priority: 1
           Action:
             Block: {}
           VisibilityConfig:
@@ -439,7 +649,7 @@ Resources:
         - !If
           - HttpFloodProtectionLogParserActivated
           - Name: !Sub '${ParentStackName}HttpFloodRegularRule'
-            Priority: 3
+            Priority: 18
             Action:
               Block: {}
             VisibilityConfig:
@@ -457,7 +667,7 @@ Resources:
         - !If
           - HttpFloodProtectionRateBasedRuleActivated
           - Name: !Sub '${ParentStackName}HttpFloodRateBasedRule'
-            Priority: 4
+            Priority: 19
             Action:
               Block: {}
             VisibilityConfig:
@@ -472,7 +682,7 @@ Resources:
         - !If
           - ScannersProbesProtectionActivated
           - Name: !Sub '${ParentStackName}ScannersAndProbesRule'
-            Priority: 5
+            Priority: 17
             Action:
               Block: {}
             VisibilityConfig:
@@ -490,7 +700,7 @@ Resources:
         - !If
           - ReputationListsProtectionActivated
           - Name: !Sub '${ParentStackName}IPReputationListsRule'
-            Priority: 6
+            Priority: 3
             Action:
               Block: {}
             VisibilityConfig:
@@ -508,7 +718,7 @@ Resources:
         - !If
           - BadBotProtectionActivated
           - Name: !Sub '${ParentStackName}BadBotRule'
-            Priority: 7
+            Priority: 5
             Action:
               Block: {}
             VisibilityConfig:
@@ -526,7 +736,7 @@ Resources:
         - !If
           - SqlInjectionProtectionActivated
           - Name: !Sub '${ParentStackName}SqlInjectionRule'
-            Priority: 20
+            Priority: 15
             Action:
               Block: {}
             VisibilityConfig:
@@ -592,7 +802,7 @@ Resources:
         - !If
           - CrossSiteScriptingProtectionActivated
           - Name: !Sub '${ParentStackName}XssRule'
-            Priority: 30
+            Priority: 16
             Action:
               Block: {}
             VisibilityConfig:
@@ -802,3 +1012,6 @@ Outputs:
   WAFBadBotSetV6Id:
     Value: !GetAtt WAFBadBotSetV6.Id
     Condition: BadBotProtectionActivated
+  
+  CustomTimerFunctionName:
+    Value: !Ref CustomTimer

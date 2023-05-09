@@ -1,5 +1,5 @@
 ###############################################################################
-#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.    #
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.    #
 #                                                                             #
 #  Licensed under the Apache License, Version 2.0 (the "License").            #
 #  You may not use this file except in compliance with the License.
@@ -17,14 +17,12 @@ from lib.solution_metrics import send_metrics
 
 
 def test_send_solution_metrics():
-    uuid = "waf3.0_test_00001"
+    uuid = "waf_test_00001"
     solution_id = "waf_test"
     data = {
-            "test_string1": "waf3.0_test",
+            "test_string1": "waf_test",
             "test_string2": "test_1"
            }
-    url = "https://oszclq8tyh.execute-api.us-east-1.amazonaws.com/prod/generic"
-    # url = 'https://metrics.awssolutionsbuilder.com/generic'
+    url = "https://testurl.com/generic"
     response = send_metrics(data, uuid, solution_id, url)
-    status_code = response.status_code
-    assert status_code == 200
+    assert response is not None

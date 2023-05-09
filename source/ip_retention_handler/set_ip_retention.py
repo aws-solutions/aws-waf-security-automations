@@ -11,11 +11,11 @@
 #  and limitations under the License.                                                                                #
 ######################################################################################################################
 
-import logging
 from os import environ
 from calendar import timegm
 from datetime import datetime, timedelta
 from lib.dynamodb_util import DDB
+from lib.logging_util import set_log_level
 
 class SetIPRetention(object):
     """
@@ -59,9 +59,9 @@ class SetIPRetention(object):
         item = {}
         request_parameters = self.is_none(event.get('requestParameters', {}))
         
-        ip_retention_period = int(environ.get('IP_RETENTION_PEROID_ALLOWED_MINUTE')) \
+        ip_retention_period = int(environ.get('IP_RETENTION_PERIOD_ALLOWED_MINUTE')) \
                               if self.is_none(str(request_parameters.get('name')).find('Whitelist')) != -1 \
-                              else int(environ.get('IP_RETENTION_PEROID_DENIED_MINUTE'))
+                              else int(environ.get('IP_RETENTION_PERIOD_DENIED_MINUTE'))
 
         # If retention period is not set, stop and return
         if ip_retention_period == -1:
@@ -114,21 +114,15 @@ class SetIPRetention(object):
         return response
 
 
-def lambda_handler(event, context):
+def lambda_handler(event, _):
     """
-    Invoke functions to put ip retentation info into ddb table. 
+    Invoke functions to put ip retention info into ddb table. 
     It is triggered by a CloudWatch events rule.
     """
     
-    log = logging.getLogger()
+    log = set_log_level()
     
     try:
-        # Set Log Level
-        log_level = str(environ['LOG_LEVEL'].upper())
-        if log_level not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
-            log_level = 'ERROR'
-        log.setLevel(log_level)
-        
         log.info('[set_ip_retention: lambda_handler] Start')
         log.info("Lambda Handler Event: \n{}".format(event))
         

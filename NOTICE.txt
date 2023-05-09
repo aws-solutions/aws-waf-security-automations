@@ -12,9 +12,52 @@ THIRD PARTY COMPONENTS
 **********************
 This software includes third party software subject to the following copyrights:
 
-async under the Massachusetts Institute of Technology (MIT) license
-sax under the Internet Systems Consortium (ISC) license
-xml2js under the Massachusetts Institute of Technology (MIT) license
-xmlbuilder under the Massachusetts Institute of Technology (MIT) license
-requests under the Apache Software License
 freezegun under the Apache Software License
+boto3 under the Apache Software License
+botocore under the Apache Software License
+Mock under the BDS License
+moto under the Apache Software License
+pytest under the MIT License
+pytest-mock under the MIT License
+pytest-cov under the MIT License
+pytest-env under the MIT License
+pyparsing under the MIT License
+pytest-runner under the MIT License
+uuid under the MIT License
+backoff under the MIT License
+requests under the Apache Software License
+certifi under the Mozilla Public License
+charset_normalizer under the Apache Software License
+python-dateutil under the Apache Software License and BSD License
+inda under the BSD License
+urllib3 under the MIT License
+jmespath under the MIT License
+s3transfer under the Apache Software License
+cryptography under the Apache Software License and BSD License
+Werkzeug under the BSD-3-Clause
+xmltodict under the MIT License
+responses under the Apache-2.0
+Jinja2 under the BSD License
+pycparser under the BSD License
+pyyaml under the MIT License
+attrs under the MIT License
+pluggy under the MIT License
+iniconfig under the MIT License
+exceptiongroup under the MIT License
+packaging under the Apache Software License and BSD License
+tomli under the MIT License
+coverage under the Apache Software License
+cffi under the MIT License
+six under the MIT License
+types-PyYAML under the Apache Software License 
+MarkupSafe under the BSD-3-Clause
+
+
+
+
+
+
+
+
+
+

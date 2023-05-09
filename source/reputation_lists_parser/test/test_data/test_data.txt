@@ -1,0 +1,9 @@
+; Test Project EDROP List 2023/04/28 - (c) 2023 The Test Project
+; https://www.testendpoint.com/testdummyvalues
+; Last-Modified: Fri, 28 Apr 2023 11:06:55 GMT
+; Expires: Sat, 29 Apr 2023 15:39:42 GMT
+x.x.x.x/x ; abcd1234
+x.x.x.x/x ; abcd1234
+x.x.x.x/x ; abcd1234
+x.x.x.x/x ; abcd1234
+x.x.x.x/x ; abcd1234

@@ -1,0 +1,10 @@
+botocore~=1.29.85
+boto3~=1.26.85
+mock~=5.0.1
+moto~=4.1.4
+pytest~=7.2.2
+pytest-mock~=3.10.0
+pytest-runner~=6.0.0
+freezegun~=1.2.2
+pytest-cov~=4.0.0
+pytest-env~=0.8.1

@@ -88,9 +88,9 @@ cd "$source_dir"/log_parser/package || exit 1
 zip -q -r9 "$build_dist_dir"/log_parser.zip .
 cd "$source_dir"/log_parser || exit 1
 mkdir -p lib
-echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py lib"
-cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py lib
-zip -g -r "$build_dist_dir"/log_parser.zip log-parser.py partition_s3_logs.py add_athena_partitions.py build_athena_queries.py lib test
+echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py $source_dir/lib/cw_metrics_util.py $source_dir/lib/logging_util.py $source_dir/lib/s3_util.py lib"
+cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py "$source_dir"/lib/cw_metrics_util.py "$source_dir"/lib/logging_util.py "$source_dir"/lib/s3_util.py lib
+zip -g -r "$build_dist_dir"/log_parser.zip log_parser.py partition_s3_logs.py add_athena_partitions.py build_athena_queries.py lambda_log_parser.py athena_log_parser.py lib test
 
 
 echo "------------------------------------------------------------------------------"
@@ -102,9 +102,9 @@ cd "$source_dir"/access_handler/package || exit 1
 zip -q -r9 "$build_dist_dir"/access_handler.zip .
 cd "$source_dir"/access_handler || exit 1
 mkdir -p lib
-echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py lib"
-cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py lib
-zip -g -r "$build_dist_dir"/access_handler.zip access-handler.py lib
+echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py $source_dir/lib/cw_metrics_util.py $source_dir/lib/logging_util.py lib"
+cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py "$source_dir"/lib/cw_metrics_util.py "$source_dir"/lib/logging_util.py lib
+zip -g -r "$build_dist_dir"/access_handler.zip access_handler.py lib
 
 
 echo "------------------------------------------------------------------------------"
@@ -116,9 +116,9 @@ cd "$source_dir"/reputation_lists_parser/package || exit 1
 zip -q -r9 "$build_dist_dir"/reputation_lists_parser.zip .
 cd "$source_dir"/reputation_lists_parser || exit 1
 mkdir -p lib
-echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py lib"
-cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py lib
-zip -g -r "$build_dist_dir"/reputation_lists_parser.zip reputation-lists.py lib
+echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py $source_dir/lib/cfn_response.py $source_dir/lib/cw_metrics_util.py  $source_dir/lib/logging_util.py lib"
+cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py "$source_dir"/lib/cfn_response.py "$source_dir"/lib/cw_metrics_util.py "$source_dir"/lib/logging_util.py lib
+zip -g -r "$build_dist_dir"/reputation_lists_parser.zip reputation_lists.py lib
 
 
 echo "------------------------------------------------------------------------------"
@@ -130,9 +130,9 @@ cd "$source_dir"/custom_resource/package || exit 1
 zip -q -r9 "$build_dist_dir"/custom_resource.zip .
 cd "$source_dir"/custom_resource || exit 1
 mkdir -p lib
-echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py lib"
-cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py lib
-zip -g -r "$build_dist_dir"/custom_resource.zip custom-resource.py lib
+echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py $source_dir/lib/s3_util.py $source_dir/lib/cfn_response.py  $source_dir/lib/logging_util.py lib"
+cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py "$source_dir"/lib/s3_util.py "$source_dir"/lib/cfn_response.py "$source_dir"/lib/logging_util.py lib
+zip -g -r "$build_dist_dir"/custom_resource.zip custom_resource.py resource_manager.py log_group_retention.py lib
 
 
 echo "------------------------------------------------------------------------------"
@@ -144,9 +144,9 @@ cd "$source_dir"/helper/package || exit 1
 zip -q -r9 "$build_dist_dir"/helper.zip ./*
 cd "$source_dir"/helper || exit 1
 mkdir -p lib
-echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/boto3_util.py lib"
-cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/boto3_util.py lib
-zip -g -r "$build_dist_dir"/helper.zip helper.py lib
+echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/boto3_util.py $source_dir/lib/s3_util.py $source_dir/lib/cfn_response.py $source_dir/lib/logging_util.py lib"
+cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/boto3_util.py "$source_dir"/lib/s3_util.py "$source_dir"/lib/cfn_response.py "$source_dir"/lib/logging_util.py lib
+zip -g -r "$build_dist_dir"/helper.zip helper.py stack_requirements.py lib
 
 
 echo "------------------------------------------------------------------------------"
@@ -157,7 +157,12 @@ pip3 install -r requirements.txt --target ./package
 cd "$source_dir"/timer/package || exit 1
 zip -q -r9 "$build_dist_dir"/timer.zip ./*
 cd "$source_dir"/timer || exit 1
-zip -g -r "$build_dist_dir"/timer.zip timer.py
+mkdir -p lib
+echo "cp $source_dir/lib/cfn_response.py lib"
+cp -rf "$source_dir"/lib/cfn_response.py lib
+echo "cp  $source_dir/lib/logging_util.py lib"
+cp -rf "$source_dir"/lib/logging_util.py lib
+zip -g -r "$build_dist_dir"/timer.zip timer.py lib
 
 
 echo "------------------------------------------------------------------------------"
@@ -169,6 +174,6 @@ cd "$source_dir"/ip_retention_handler/package || exit 1
 zip -q -r9 "$build_dist_dir"/ip_retention_handler.zip ./*
 cd "$source_dir"/ip_retention_handler || exit 1
 mkdir -p lib
-echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/sns_util.py $source_dir/lib/dynamodb_util.py $source_dir/lib/boto3_util.py lib"
-cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/sns_util.py "$source_dir"/lib/dynamodb_util.py $source_dir/lib/boto3_util.py lib
+echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/sns_util.py $source_dir/lib/dynamodb_util.py $source_dir/lib/boto3_util.py  $source_dir/lib/logging_util.py lib"
+cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/sns_util.py "$source_dir"/lib/dynamodb_util.py $source_dir/lib/boto3_util.py "$source_dir"/lib/logging_util.py lib
 zip -g -r "$build_dist_dir"/ip_retention_handler.zip set_ip_retention.py remove_expired_ip.py lib test
