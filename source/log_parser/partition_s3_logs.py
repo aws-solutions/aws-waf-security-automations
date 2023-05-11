@@ -1,5 +1,5 @@
 ##############################################################################
-#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.   #
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.   #
 #                                                                            #
 #  Licensed under the Apache License, Version 2.0 (the "License").           #
 #  You may not use this file except in compliance                            #
@@ -13,15 +13,12 @@
 #  governing permissions  and limitations under the License.                 #
 ##############################################################################
 
-
-import boto3
 import re
-import logging
 from os import environ
-from botocore.config import Config
 from lib.boto3_util import create_client
+from lib.logging_util import set_log_level
 
-def lambda_handler(event, context):
+def lambda_handler(event, _):
     """
     This function is triggered by S3 event to move log files
     (upon their arrival in s3) from their original location
@@ -33,25 +30,17 @@ def lambda_handler(event, context):
       AWSLogs-Partitioned/year=2020/month=04/day=09/hour=23/
 
     """
-    logging.getLogger().debug('[partition_s3_logs lambda_handler] Start')
+    log = set_log_level()
+    log.debug('[partition_s3_logs lambda_handler] Start')
     try:
-        # ---------------------------------------------------------
-        # Set Log Level
-        # ---------------------------------------------------------
-        global log_level
-        log_level = str(environ['LOG_LEVEL'].upper())
-        if log_level not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
-            log_level = 'ERROR'
-        logging.getLogger().setLevel(log_level)
-
         # ----------------------------------------------------------
         # Process event
         # ----------------------------------------------------------
-        logging.getLogger().info(event)
+        log.info(event)
         
         keep_original_data = str(environ['KEEP_ORIGINAL_DATA'].upper())
         endpoint = str(environ['ENDPOINT'].upper())
-        logging.getLogger().info("\n[partition_s3_logs lambda_handler] KEEP ORIGINAL DATA: %s; End POINT: %s."
+        log.info("\n[partition_s3_logs lambda_handler] KEEP ORIGINAL DATA: %s; End POINT: %s."
                                  %(keep_original_data, endpoint))
 
         s3 = create_client('s3')
@@ -81,25 +70,25 @@ def lambda_handler(event, context):
             source_path = bucket + '/' + key
             dest_path = bucket + '/' + dest
             
-            # Copy S3 object to destionation
+            # Copy S3 object to destination
             s3.copy_object(Bucket=bucket, Key=dest, CopySource=source_path)
 
-            logging.getLogger().info("\n[partition_s3_logs lambda_handler] Copied file %s to destination %s"%(source_path, dest_path))
+            log.info("\n[partition_s3_logs lambda_handler] Copied file %s to destination %s"%(source_path, dest_path))
             
             # Only delete source S3 object from its original folder if keeping original data is no
             if keep_original_data == 'NO':
                 s3.delete_object(Bucket=bucket, Key=key)
-                logging.getLogger().info("\n[partition_s3_logs lambda_handler] Removed file %s"%source_path)
+                log.info("\n[partition_s3_logs lambda_handler] Removed file %s"%source_path)
                 
             count = count + 1
             
-        logging.getLogger().info("\n[partition_s3_logs lambda_handler] Successfully partitioned %s file(s)."%(str(count)))
+        log.info("\n[partition_s3_logs lambda_handler] Successfully partitioned %s file(s)."%(str(count)))
 
     except Exception as error:
-        logging.getLogger().error(str(error))
+        log.error(str(error))
         raise
 
-    logging.getLogger().debug('[partition_s3_logs lambda_handler] End')
+    log.debug('[partition_s3_logs lambda_handler] End')
 
 
 def parse_cloudfront_logs(key, filename):

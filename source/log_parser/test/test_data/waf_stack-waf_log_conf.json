@@ -1,0 +1,17 @@
+{
+	"general": {
+		"requestThreshold": 20,
+		"blockPeriod": 240,
+		"ignoredSufixes": [".css", ".js", ".jpeg"]
+	},
+	"uriList": {
+		"/socket.io/": {
+			"requestThreshold": 5,
+			"blockPeriod": 100
+		},
+        "/assets/public/images/products/green_smoothie.jpg": {
+			"requestThreshold": 5,
+			"blockPeriod": 100
+		}
+	}
+}

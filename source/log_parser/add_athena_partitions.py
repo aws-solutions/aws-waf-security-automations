@@ -1,5 +1,5 @@
 ##############################################################################
-#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.   #
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.   #
 #                                                                            #
 #  Licensed under the Apache License, Version 2.0 (the "License").           #
 #  You may not use this file except in compliance                            #
@@ -14,29 +14,17 @@
 ##############################################################################
 
 import datetime
-import boto3
-import re
-import logging
-from os import environ
-from botocore.config import Config
 from lib.boto3_util import create_client
+from lib.logging_util import set_log_level
 
-def lambda_handler(event, context):
+def lambda_handler(event, _):
     """
     This function adds a new hourly partition to athena table.
     It runs every hour, triggered by a CloudWatch event rule.
     """
-    log = logging.getLogger()
+    log = set_log_level()
     log.debug('[add-athena-partition lambda_handler] Start')
     try:
-        # ---------------------------------------------------------
-        # Set Log Level
-        # ---------------------------------------------------------
-        log_level = str(environ['LOG_LEVEL'].upper())
-        if log_level not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
-            log_level = 'ERROR'
-        log.setLevel(log_level)
-
         # ----------------------------------------------------------
         # Process event
         # ----------------------------------------------------------

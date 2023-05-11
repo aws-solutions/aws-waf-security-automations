@@ -10,8 +10,47 @@ source/tests/__pycache__/
 source/log_parser/__pycache__/
 deployment/global-s3-assets/
 deployment/regional-s3-assets/
+source/**/idna**
+source/**/certifi**
+source/**/urllib**
+source/**/requests**
+source/**/backoff**
+source/**/charset**
+source/**/bin
+source/**/__pycache__
+source/**/.venv**
+source/**/test/__pycache__
+source/**/test/.pytest**
 
-# coverage
+
+
+
+
+# Unit test / coverage reports
 **/coverage
 **/package
-*coverage*
+*coverage
+source/test/coverage-reports/
+**/.venv-test
+
+# linting, scanning configurations, sonarqube
+.scannerwork/
+
+# Third-party dependencies
+backoff*
+bin
+boto3*
+botocore*
+certifi*
+charset*
+dateutil*
+idna*
+jmespath*
+python_*
+requests*
+s3transfer*
+six*
+urllib*
+
+# Ignore lib folder within each lambada folder. Only include lib folder at upper level
+/source/**/lib

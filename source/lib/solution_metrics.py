@@ -1,5 +1,5 @@
 ###############################################################################
-#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.    #
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.    #
 #                                                                             #
 #  Licensed under the Apache License, Version 2.0 (the "License").            #
 #  You may not use this file except in compliance with the License.
@@ -46,7 +46,7 @@ def send_metrics(data,
             }
         json_data = dumps(metrics_data)
         headers = {'content-type': 'application/json'}
-        response = requests.post(url, data=json_data, headers=headers, timeout=300)
+        response = requests.post(url, data=json_data, headers=headers, timeout=10)
         return response
     except Exception as e:
         log.error("[solution_metrics:send_metrics] Failed to send solution metrics.")

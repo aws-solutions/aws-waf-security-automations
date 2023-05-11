@@ -12,9 +12,6 @@
 ######################################################################################################################
 #!/bin/python
 
-import boto3
-from os import environ
-from botocore.config import Config
 from lib.boto3_util import create_client
 
 class SNS(object):
@@ -31,6 +28,6 @@ class SNS(object):
             )
             return response
         except Exception as e:
-            self.log.error("[sns_util: publish] failed to send email notificaion: \nTopic Arn: %s\nMessage: %s", topic_arn, message)
+            self.log.error("[sns_util: publish] failed to send email notification: \nTopic Arn: %s\nMessage: %s", topic_arn, message)
             self.log.error(e)
             return None

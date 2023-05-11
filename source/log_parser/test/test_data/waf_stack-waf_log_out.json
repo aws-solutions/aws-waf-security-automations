@@ -1,0 +1,13 @@
+{
+	"general": {
+		"x.0.0.0": {
+			"max_counter_per_min": 715,
+			"updated_at": "2023-04-24 22:16:11 UTC+0000"
+		},
+		"x.x.0.0": {
+			"max_counter_per_min": 8571,
+			"updated_at": "2023-04-24 22:16:11 UTC+0000"
+		}
+	},
+	"uriList": {}
+}

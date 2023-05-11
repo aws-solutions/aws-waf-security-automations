@@ -3,8 +3,8 @@
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006) - AWS WAF Security Automations %VERSION%: This AWS CloudFormation template helps
-  you provision the AWS WAF Security Automations stack without worrying about creating and
+  (SO0006) - Security Automations for AWS WAF %VERSION%: This AWS CloudFormation template helps
+  you provision the Security Automations for AWS WAF stack without worrying about creating and
   configuring the underlying AWS infrastructure.
 
   **WARNING** This template creates multiple AWS Lambda functions, an AWS WAFv2 Web ACL, an Amazon S3 bucket,
@@ -15,37 +15,106 @@ Metadata:
   AWS::CloudFormation::Interface:
     ParameterGroups:
       - Label:
-          default: Protection List
+          default: Resource Type
+        Parameters:
+          - EndpointType
+      - Label:
+          default: AWS Managed IP Reputation Rule Groups
+        Parameters:
+          - ActivateAWSManagedIPRParam
+          - ActivateAWSManagedAIPParam
+      - Label:
+          default: AWS Managed Baseline Rule Groups
         Parameters:
           - ActivateAWSManagedRulesParam
+          - ActivateAWSManagedAPParam
+          - ActivateAWSManagedKBIParam
+      - Label:
+          default: AWS Managed Use-case Specific Rule Groups
+        Parameters:
+          - ActivateAWSManagedSQLParam
+          - ActivateAWSManagedLinuxParam
+          - ActivateAWSManagedPOSIXParam
+          - ActivateAWSManagedWindowsParam
+          - ActivateAWSManagedPHPParam
+          - ActivateAWSManagedWPParam
+      - Label:
+          default: Custom Rule - Scanner & Probes
+        Parameters:
+          - ActivateScannersProbesProtectionParam
+          - AppAccessLogBucket
+          - AppAccessLogBucketPrefixParam
+          - AppAccessLogBucketLoggingStatusParam
+          - ErrorThreshold
+          - KeepDataInOriginalS3Location
+      - Label:
+          default: Custom Rule - HTTP Flood
+        Parameters:
+          - ActivateHttpFloodProtectionParam
+          - RequestThreshold
+          - RequestThresholdByCountryParam
+          - HTTPFloodAthenaQueryGroupByParam
+          - WAFBlockPeriod
+          - AthenaQueryRunTimeScheduleParam
+      - Label:
+          default: Custom Rule - Bad Bot 
+        Parameters:
+          - ActivateBadBotProtectionParam
+          - ApiGatewayBadBotCWRoleParam 
+      - Label:
+          default: Custom Rule - Third Party IP Reputation Lists
+        Parameters:
+          - ActivateReputationListsProtectionParam
+      - Label:
+          default: Legacy Custom Rules
+        Parameters:
           - ActivateSqlInjectionProtectionParam
           - SqlInjectionProtectionSensitivityLevelParam
           - ActivateCrossSiteScriptingProtectionParam
-          - ActivateHttpFloodProtectionParam
-          - ActivateScannersProbesProtectionParam
-          - ActivateReputationListsProtectionParam
-          - ActivateBadBotProtectionParam
-
       - Label:
-          default: Log Monitoring Settings
-        Parameters:
-          - EndpointType
-          - AppAccessLogBucket
-          - ErrorThreshold
-          - RequestThreshold
-          - WAFBlockPeriod
-          - KeepDataInOriginalS3Location
-
-      - Label:
-          default: IP Retention Settings
+          default: Allowed and Denied IP Retention Settings
         Parameters:
           - IPRetentionPeriodAllowedParam
           - IPRetentionPeriodDeniedParam
           - SNSEmailParam
+      - Label:
+          default: Advanced Settings
+        Parameters:
+          - LogGroupRetentionParam
 
     ParameterLabels:
       ActivateAWSManagedRulesParam:
-        default: Activate AWS Managed Rules Protection
+        default: Activate Core Rule Set Managed Rule Group Protection
+
+      ActivateAWSManagedAPParam:
+        default: Activate Admin Protection Managed Rule Group Protection
+
+      ActivateAWSManagedKBIParam:
+        default: Activate Known Bad Inputs Managed Rule Group Protection
+
+      ActivateAWSManagedIPRParam:
+        default: Activate Amazon IP reputation List Managed Rule Group Protection
+
+      ActivateAWSManagedAIPParam:
+        default: Activate Anonymous IP List Managed Rule Group Protection
+
+      ActivateAWSManagedSQLParam:
+        default: Activate SQL Database Managed Rule Group Protection
+
+      ActivateAWSManagedLinuxParam:
+        default: Activate Linux Operating System Managed Rule Group Protection
+
+      ActivateAWSManagedPOSIXParam:
+        default: Activate POSIX Operating System Managed Rule Group Protection
+
+      ActivateAWSManagedWindowsParam:
+        default: Activate Windows Operating System Managed Rule Group Protection
+
+      ActivateAWSManagedPHPParam:
+        default: Activate PHP Application Managed Rule Group Protection
+      
+      ActivateAWSManagedWPParam:
+        default: Activate WordPress Application Managed Rule Group Protection
 
       ActivateSqlInjectionProtectionParam:
         default: Activate SQL Injection Protection
@@ -68,20 +137,38 @@ Metadata:
       ActivateBadBotProtectionParam:
         default: Activate Bad Bot Protection
 
+      ApiGatewayBadBotCWRoleParam:
+        default: ARN of an IAM role that has write access to CloudWatch logs in your account
+
       EndpointType:
-        default: Endpoint Type
+        default: Endpoint
 
       AppAccessLogBucket:
         default: Application Access Log Bucket Name
+
+      AppAccessLogBucketPrefixParam:
+        default: Application Access Log Bucket Prefix
+
+      AppAccessLogBucketLoggingStatusParam:
+        default: Is bucket access logging turned on?
 
       ErrorThreshold:
         default: Error Threshold
 
       RequestThreshold:
-        default: Request Threshold
+        default: Default Request Threshold
+
+      RequestThresholdByCountryParam:
+        default: Request Threshold by Country
+
+      HTTPFloodAthenaQueryGroupByParam:
+        default: Group By Requests in HTTP Flood Athena Query
 
       WAFBlockPeriod:
         default: WAF Block Period
+
+      AthenaQueryRunTimeScheduleParam:
+        default: Athena Query Run Time Schedule (Minute)
 
       KeepDataInOriginalS3Location:
         default: Keep Data in Original S3 Location
@@ -93,7 +180,10 @@ Metadata:
         default: Retention Period (Minutes) for Denied IP Set
 
       SNSEmailParam:
-        default: Email for receiving notifcation upon Allowed or Denied IP Sets expiration
+        default: Email for receiving notification upon Allowed or Denied IP Sets expiration
+
+      LogGroupRetentionParam:
+        default: Retention Period (Days) for Log Groups
 
 
 Parameters:
@@ -103,7 +193,134 @@ Parameters:
     AllowedValues:
       - 'yes'
       - 'no'
-    Description: Choose yes to enable the AWS Managed Rules.
+    Description: >- 
+      Core Rule Set provides protection against exploitation of a wide range of vulnerabilities,
+      including some of the high risk and commonly occurring vulnerabilities. Consider using 
+      this rule group for any AWS WAF use case. Required WCU: 700. Your account should have
+      sufficient WCU capacity to avoid WebACL stack deployment failure due to exceeding the
+      capacity limit. 
+
+  ActivateAWSManagedAPParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The Admin protection rule group blocks external access to exposed administrative pages.
+      This might be useful if you run third-party software or want to reduce the risk of a
+      malicious actor gaining administrative access to your application. Required WCU: 100.
+
+  ActivateAWSManagedKBIParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The Known bad inputs rule group blocks request patterns that are known to be invalid and
+      are associated with exploitation or discovery of vulnerabilities. This can help reduce
+      the risk of a malicious actor discovering a vulnerable application. Required WCU: 200.
+
+  ActivateAWSManagedIPRParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The Amazon IP reputation list rule group are based on Amazon internal threat intelligence. 
+      This is useful if you would like to block IP addresses typically associated with bots or
+      other threats. Blocking these IP addresses can help mitigate bots and reduce the risk of
+      a malicious actor discovering a vulnerable application. Required WCU: 25.
+
+  ActivateAWSManagedAIPParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The Anonymous IP list rule group blocks requests from services that permit the obfuscation of
+      viewer identity. These include requests from VPNs, proxies, Tor nodes, and hosting providers.
+      This rule group is useful if you want to filter out viewers that might be trying to hide their
+      identity from your application. Blocking the IP addresses of these services can help mitigate
+      bots and evasion of geographic restrictions. Required WCU: 50.
+
+  ActivateAWSManagedSQLParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The SQL database rule group blocks request patterns associated with exploitation of SQL databases,
+      like SQL injection attacks. This can help prevent remote injection of unauthorized queries. Evaluate
+      this rule group for use if your application interfaces with an SQL database. Using the SQL injection
+      custom rule is optional, if you already have AWS managed SQL rule group activated. Required WCU: 200.
+
+  ActivateAWSManagedLinuxParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The Linux operating system rule group blocks request patterns associated with the exploitation of
+      vulnerabilities specific to Linux, including Linux-specific Local File Inclusion (LFI) attacks.
+      This can help prevent attacks that expose file contents or run code for which the attacker should
+      not have had access. Evaluate this rule group if any part of your application runs on Linux. You
+      should use this rule group in conjunction with the POSIX operating system rule group. Required WCU: 200.
+
+  ActivateAWSManagedPOSIXParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The POSIX operating system rule group blocks request patterns associated with the exploitation of
+      vulnerabilities specific to POSIX and POSIX-like operating systems, including Local File Inclusion
+      (LFI) attacks. This can help prevent attacks that expose file contents or run code for which the
+      attacker should not have had access. Evaluate this rule group if any part of your application runs
+      on a POSIX or POSIX-like operating system. Required WCU: 100.
+
+  ActivateAWSManagedWindowsParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The Windows operating system rule group blocks request patterns associated with the exploitation of 
+      vulnerabilities specific to Windows, like remote execution of PowerShell commands. This can help
+      prevent exploitation of vulnerabilities that permit an attacker to run unauthorized commands or run
+      malicious code. Evaluate this rule group if any part of your application runs on a Windows operating
+      system. Required WCU: 200.
+
+  ActivateAWSManagedPHPParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The PHP application rule group blocks request patterns associated with the exploitation of vulnerabilities
+      specific to the use of the PHP programming language, including injection of unsafe PHP functions. This can
+      help prevent exploitation of vulnerabilities that permit an attacker to remotely run code or commands for
+      which they are not authorized. Evaluate this rule group if PHP is installed on any server with which your
+      application interfaces. Required WCU: 100.
+
+  ActivateAWSManagedWPParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      The WordPress application rule group blocks request patterns associated with the exploitation of vulnerabilities
+      specific to WordPress sites. Evaluate this rule group if you are running WordPress. This rule group should be
+      used in conjunction with the SQL database and PHP application rule groups. Required WCU: 100.
 
   ActivateSqlInjectionProtectionParam:
     Type: String
@@ -114,9 +331,10 @@ Parameters:
       - 'yes - NO_MATCH'
       - 'no'
     Description: >-
-      Choose yes to deploy the default SQL injection protection rule designed to block common SQL injection attacks. 
-      It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
-      your changes will be overwritten after stack update.
+      Choose yes to deploy the default SQL injection protection rule designed to block common SQL injection attacks.
+      Consider activating it if you are not using Core Rule Set or AWS managed SQL database rule group. The 'yes' 
+      option uses CONTINUE for oversized request handling by default. Note: If you customized the rule outside of 
+      CloudFormation, your changes will be overwritten after stack update.
 
   SqlInjectionProtectionSensitivityLevelParam:
     Type: String
@@ -140,8 +358,8 @@ Parameters:
       - 'no'
     Description: >-
       Choose yes to deploy the default cross-site scripting protection rule designed to block common cross-site scripting attacks.
-      It uses CONTINUE option for oversized request handling by default. Note: If you customized the rule outside of CloudFormation,
-      your changes will be overwritten after stack update. 
+      Consider activating it if you are not using Core Rule Set. The 'yes' option uses CONTINUE for oversized request handling by
+      default. Note: If you customized the rule outside of CloudFormation, your changes will be overwritten after stack update. 
 
   ActivateHttpFloodProtectionParam:
     Type: String
@@ -151,7 +369,7 @@ Parameters:
       - 'yes - AWS Lambda log parser'
       - 'yes - Amazon Athena log parser'
       - 'no'
-    Description: Choose yes to enable the component designed to block HTTP flood attacks.
+    Description: Choose yes to activate the component designed to block HTTP flood attacks.
 
   ActivateScannersProbesProtectionParam:
     Type: String
@@ -160,7 +378,7 @@ Parameters:
       - 'yes - AWS Lambda log parser'
       - 'yes - Amazon Athena log parser'
       - 'no'
-    Description: Choose yes to enable the component designed to block scanners and probes.
+    Description: Choose yes to activate the component designed to block scanners and probes.
 
   ActivateReputationListsProtectionParam:
     Type: String
@@ -178,7 +396,17 @@ Parameters:
     AllowedValues:
       - 'yes'
       - 'no'
-    Description: Choose yes to enable the component designed to block bad bots and content scrapers.
+    Description: Choose yes to activate the component designed to block bad bots and content scrapers.
+
+  ApiGatewayBadBotCWRoleParam:
+    Type: String
+    Default: ''
+    Description: >-
+      Provide an optional ARN of an IAM role that has write access to CloudWatch logs in your
+      account. Example ARN: arn:aws:iam::account_id:role/myrolename.
+      See https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-logging.html
+      for instructions on how to create the role. If you leave it blank (default), a new role
+      will be created for you.
 
   EndpointType:
     Type: String
@@ -186,7 +414,7 @@ Parameters:
     AllowedValues:
       - 'CloudFront'
       - 'ALB'
-    Description: Select the type of resource being used.
+    Description: Select the resource type and then select the resource below that you want to associate with this web ACL.
 
   AppAccessLogBucket:
     Type: String
@@ -194,9 +422,31 @@ Parameters:
     AllowedPattern: '(^$|^([a-z]|(\d(?!\d{0,2}\.\d{1,3}\.\d{1,3}\.\d{1,3})))([a-z\d]|(\.(?!(\.|-)))|(-(?!\.))){1,61}[a-z\d]$)'
     Description: >-
       If you chose yes for the Activate Scanners & Probes Protection parameter, enter a name for the 
-      Amazon S3 bucket where you want to store access logs for your CloudFront distribution or Application 
-      Load Balancer. More about bucket name restriction here: http://amzn.to/1p1YlU5. 
-      If you chose to deactivate this protection, ignore this parameter. 
+      Amazon S3 bucket (new or existing) where you want to store access logs for your CloudFront
+      distribution or Application Load Balancer. More about bucket name restriction here:
+      http://amzn.to/1p1YlU5. If you chose to deactivate this protection, ignore this parameter. 
+
+  AppAccessLogBucketPrefixParam:
+    Type: String
+    Default: 'AWSLogs/'
+    Description: >- 
+      If you chose yes for the Activate Scanners & Probes Protection parameter, you can enter
+      an optional user defined prefix for the application access logs bucket above. For ALB resource,
+      you must append AWSLogs/ to your prefix such as yourprefix/AWSLogs/. For CloudFront resource, 
+      you can enter any prefix such as yourprefix/. Leave it to AWSLogs/ (default) if there isn't a
+      user-defined prefix. If you chose to deactivate this protection, ignore this parameter. 
+    
+  AppAccessLogBucketLoggingStatusParam:
+    Type: String
+    Default: 'no'
+    AllowedValues:
+      - 'yes'
+      - 'no'
+    Description: >- 
+      Choose yes if you provided an existing application access log bucket above and the server access
+      logging for the bucket is already turned on. If you chose no, the solution will turn on server
+      access logging for your bucket. If you deactivate Scanners & Probes Protection, ignore this
+      parameter.
 
   ErrorThreshold:
     Type: Number
@@ -213,10 +463,41 @@ Parameters:
     MinValue: 0
     Description:  >-
       If you chose yes for the Activate HTTP Flood Protection parameter, enter the maximum
-      acceptable requests per FIVE-minute period per IP address. Please note that AWS WAF rate
-      based rule requires values greater than 100 (if you chose Lambda/Athena log parser options,
-      you can use any value greater than zero). If you chose to deactivate this protection, ignore
-      this parameter.
+      acceptable requests per IP address per FIVE-minute period (default). You can change 
+      the time period by entering a different number for Athena Query Run Time Schedule below.
+      The request threshold is divided by this number to get the desired threshold per
+      minute that is used in Athena query. Note: AWS WAF rate based rule requires a value 
+      greater than 100 (if you chose Lambda/Athena log parser options, you can use any value
+      greater than zero). If you chose to deactivate this protection, ignore this parameter.
+
+  RequestThresholdByCountryParam:
+    Type: String
+    Default: ''
+    AllowedPattern: '^$|^\{"\w+":\d+([,]"\w+":\d+)*\}+$'
+    Description:  >-
+      If you chose Athena Log Parser to activate HTTP Flood Protection, you can enter a threshold
+      by country following this JSON format {"TR":50,"ER":150}. These thresholds will be used for 
+      the requests originated from the specified countries, while the default threshold above
+      will be used for the remaining requests. The threshold is calculated in a default FIVE-minute
+      period. You can change the time period by entering a different number for Athena Query Run Time
+      Schedule below. The request threshold is divided by this number to get the desired threshold
+      per minute that is used in Athena query. Note: If you define a threshold by country, country 
+      will automatically be included in Athena query group-by clause, along with ip and other group-by
+      fields you may select below. If you chose to deactivate this protection, ignore this parameter.
+
+  HTTPFloodAthenaQueryGroupByParam:
+    Type: String
+    Default: 'None'
+    AllowedValues: 
+      - 'Country'
+      - 'URI'
+      - 'Country and URI'
+      - 'None'
+    Description:  >-
+      If you chose Athena Log Parser to activate HTTP Flood Protection, you can select a group-by field
+      to count requests per IP along with the selected group-by field. For example, if URI is selected, 
+      the requests will be counted per IP and URI. If you chose to deactivate this protection,
+      ignore this parameter.
 
   WAFBlockPeriod:
     Type: Number
@@ -226,6 +507,17 @@ Parameters:
       If you chose yes for the Activate Scanners & Probes Protection or HTTP Flood Lambda/Athena log
       parser parameters, enter the period (in minutes) to block applicable IP addresses. If you
       chose to deactivate log parsing, ignore this parameter.
+
+  AthenaQueryRunTimeScheduleParam:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    Description:  >-
+      If you chose Athena Log Parser to activate Scanners & Probes Protection or HTTP Flood Protection,
+      you can enter a time interval (in minutes) over which the Athena query runs. By default, the Athena
+      query runs every 5 minutes. Request threshold entered above is divided by this number to get the 
+      threshold per minute in the Athena query. If you chose to deactivate these protections, ignore this
+      parameter.
 
   KeepDataInOriginalS3Location:
     Type: String
@@ -266,6 +558,37 @@ Parameters:
     Description: >-
       If you activated IP retention period above and want to receive an email notification when IP addresses expire, enter a valid email address.
       If you did not activate IP retention or want to disable email notification, leave it blank (default).
+
+  LogGroupRetentionParam:
+    Type: Number
+    Default: 365
+    AllowedValues:
+      - -1
+      - 1
+      - 3
+      - 5
+      - 7
+      - 14
+      - 30
+      - 60
+      - 90
+      - 120
+      - 150
+      - 180
+      - 365
+      - 400
+      - 545
+      - 731
+      - 1827
+      - 2192
+      - 2557
+      - 2922
+      - 3288
+      - 3653
+    Description: >-
+      If you want to activate retention for the CloudWatch Log Groups, enter a number (1 or above) as the retention period (days). 
+      You can choose a retention period between one day and 10 years. By default logs will expired after 1 year. Set it to -1 to 
+      keep the logs indefinitely.
 
 Conditions:
   HttpFloodProtectionRateBasedRuleActivated: !Equals
@@ -316,6 +639,12 @@ Conditions:
     - !Ref ActivateBadBotProtectionParam
     - 'yes'
 
+  ApiGatewayBadBotCWRoleNotExists: !Equals [!Ref ApiGatewayBadBotCWRoleParam, '']
+
+  CreateApiGatewayBadBotCloudWatchRole: !And
+    - Condition: BadBotProtectionActivated
+    - Condition: ApiGatewayBadBotCWRoleNotExists
+ 
   AlbEndpoint: !Equals
     - !Ref EndpointType
     - 'ALB'
@@ -337,6 +666,26 @@ Conditions:
   SNSEmail: !And
     - Condition: IPRetentionPeriod
     - Condition: SNSEmailProvided
+
+  AppAccessLogBucketLoggingOff: !Equals
+    - !Ref AppAccessLogBucketLoggingStatusParam
+    - 'no'
+
+  TurnOnAppAccessLogBucketLogging: !And
+    - Condition: ScannersProbesProtectionActivated
+    - Condition: AppAccessLogBucketLoggingOff
+
+  CreateS3LoggingBucket: !Or
+    - Condition: HttpFloodProtectionLogParserActivated
+    - Condition: TurnOnAppAccessLogBucketLogging
+
+  UserDefinedAppAccessLogBucketPrefix: !Not [!Equals [!Ref AppAccessLogBucketPrefixParam, 'AWSLogs/']]
+
+  RequestThresholdByCountry: !Not [!Equals [!Ref RequestThresholdByCountryParam, '']]
+
+  IsAthenaQueryRunEveryMinute: !Equals [!Ref AthenaQueryRunTimeScheduleParam, 1]
+
+  LogGroupRetentionEnabled: !Not [!Equals [!Ref LogGroupRetentionParam, -1]]
 
 Mappings:
     SourceCode:
@@ -360,8 +709,6 @@ Mappings:
             WAFScannersProbesRule: 'BLOCK'
             WAFIPReputationListsRule: 'BLOCK'
             WAFBadBotRule: 'BLOCK'
-        Athena:
-            QueryScheduledRunTime: 5   # by default athena query runs every 5 minutes, update it if needed
         UserAgent:
             UserAgentExtra: 'AwsSolution/SO0006/%VERSION%'
         AppRegistry:
@@ -420,6 +767,16 @@ Resources:
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
       Parameters:
         ActivateAWSManagedRulesParam: !Ref ActivateAWSManagedRulesParam
+        ActivateAWSManagedAPParam: !Ref ActivateAWSManagedAPParam
+        ActivateAWSManagedKBIParam: !Ref ActivateAWSManagedKBIParam
+        ActivateAWSManagedIPRParam: !Ref ActivateAWSManagedIPRParam
+        ActivateAWSManagedAIPParam: !Ref ActivateAWSManagedAIPParam
+        ActivateAWSManagedSQLParam: !Ref ActivateAWSManagedSQLParam
+        ActivateAWSManagedLinuxParam: !Ref ActivateAWSManagedLinuxParam
+        ActivateAWSManagedPOSIXParam: !Ref ActivateAWSManagedPOSIXParam
+        ActivateAWSManagedWindowsParam: !Ref ActivateAWSManagedWindowsParam
+        ActivateAWSManagedPHPParam: !Ref ActivateAWSManagedPHPParam
+        ActivateAWSManagedWPParam: !Ref ActivateAWSManagedWPParam
         ActivateSqlInjectionProtectionParam: !Ref ActivateSqlInjectionProtectionParam
         ActivateCrossSiteScriptingProtectionParam: !Ref ActivateCrossSiteScriptingProtectionParam
         SqlInjectionProtectionSensitivityLevelParam: !Ref SqlInjectionProtectionSensitivityLevelParam
@@ -899,6 +1256,24 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*CustomResource*'
+        - PolicyName: LogsGroupAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:DescribeLogGroups'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:*'
+        - PolicyName: LogsGroupRetentionAccess
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:PutRetentionPolicy'
+                Resource:
+                  - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*'
         - !If
           - ScannersProbesProtectionActivated
           - PolicyName: S3BucketLoggingAccess
@@ -1081,7 +1456,7 @@ Resources:
                   - 'logs:PutLogEvents'
                 Resource:
                   - !Sub 'arn:${AWS::Partition}:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/*AddAthenaPartitions*'
-                
+
   Helper:
     Type: 'AWS::Lambda::Function'
     Properties:
@@ -1097,7 +1472,7 @@ Resources:
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
           SCOPE: !If [AlbEndpoint, 'REGIONAL', 'CLOUDFRONT']
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 128
       Timeout: 300
     Metadata:
@@ -1239,6 +1614,26 @@ Resources:
     Properties:
       ServiceToken: !GetAtt Helper.Arn
 
+  SetCloudWatchLogGroupRetention:
+    Type: 'Custom::SetCloudWatchLogGroupRetention'
+    Condition: LogGroupRetentionEnabled
+    DependsOn: CheckRequirements
+    Properties:
+      ServiceToken: !GetAtt CustomResource.Arn
+      StackName: !Ref 'AWS::StackName'
+      SolutionVersion: "%VERSION%"
+      LogGroupRetention: !Ref LogGroupRetentionParam
+      LogParserLambdaName: !If [LogParser, !Ref LogParser, !Ref 'AWS::NoValue']
+      HelperLambdaName: !Ref Helper
+      MoveS3LogsForPartitionLambdaName: !If [ScannersProbesAthenaLogParser, !Ref MoveS3LogsForPartition, !Ref 'AWS::NoValue']
+      AddAthenaPartitionsLambdaName: !If [AthenaLogParser, !Ref AddAthenaPartitions, !Ref 'AWS::NoValue']
+      SetIPRetentionLambdaName: !If [IPRetentionPeriod, !Ref SetIPRetention, !Ref 'AWS::NoValue']
+      RemoveExpiredIPLambdaName: !If [IPRetentionPeriod, !Ref RemoveExpiredIP, !Ref 'AWS::NoValue']
+      ReputationListsParserLambdaName: !If [ReputationListsProtectionActivated, !Ref ReputationListsParser, !Ref 'AWS::NoValue']
+      BadBotParserLambdaName: !If [BadBotProtectionActivated, !Ref BadBotParser, !Ref 'AWS::NoValue']
+      CustomResourceLambdaName: !Ref CustomResource
+      CustomTimerLambdaName: !GetAtt WebACLStack.Outputs.CustomTimerFunctionName
+
   CreateDeliveryStreamName:
     Type: 'Custom::CreateDeliveryStreamName'
     Condition: HttpFloodProtectionLogParserActivated
@@ -1284,7 +1679,7 @@ Resources:
 
   AccessLoggingBucket:
     Type: AWS::S3::Bucket
-    Condition: LogParser
+    Condition: CreateS3LoggingBucket
     DependsOn: CheckRequirements
     DeletionPolicy: Retain
     UpdateReplacePolicy: Retain
@@ -1306,7 +1701,7 @@ Resources:
 
   AccessLoggingBucketPolicy:
     Type: AWS::S3::BucketPolicy
-    Condition: LogParser
+    Condition: CreateS3LoggingBucket
     Properties:
       Bucket:
         Ref: AccessLoggingBucket
@@ -1347,7 +1742,7 @@ Resources:
       Description: >-
             This function parses access logs to identify suspicious behavior, such as an abnormal amount of errors.
             It then blocks those IP addresses for a customer-defined period of time.
-      Handler: 'log-parser.lambda_handler'
+      Handler: 'log_parser.lambda_handler'
       Role: !GetAtt LambdaRoleLogParser.Arn
       Code:
         S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
@@ -1377,10 +1772,13 @@ Resources:
           WAF_BLOCK_PERIOD: !Ref WAFBlockPeriod
           ERROR_THRESHOLD: !Ref ErrorThreshold
           REQUEST_THRESHOLD: !Ref RequestThreshold
+          REQUEST_THRESHOLD_BY_COUNTRY: !Ref RequestThresholdByCountryParam
+          HTTP_FLOOD_ATHENA_GROUP_BY: !Ref HTTPFloodAthenaQueryGroupByParam
+          ATHENA_QUERY_RUN_SCHEDULE: !Ref AthenaQueryRunTimeScheduleParam
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 512
       Timeout: 300
     Metadata:
@@ -1412,7 +1810,7 @@ Resources:
           KEEP_ORIGINAL_DATA: !Ref KeepDataInOriginalS3Location
           ENDPOINT: !Ref EndpointType
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 512
       Timeout: 300
     Metadata:
@@ -1441,7 +1839,7 @@ Resources:
         Variables:
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 512
       Timeout: 300
     Metadata:
@@ -1470,11 +1868,11 @@ Resources:
           LOG_LEVEL: !FindInMap ["Solution", "Data", "LogLevel"]
           TABLE_NAME: !Ref IPRetentionDDBTable
           STACK_NAME: !Ref 'AWS::StackName'
-          IP_RETENTION_PEROID_ALLOWED_MINUTE: !Ref IPRetentionPeriodAllowedParam
-          IP_RETENTION_PEROID_DENIED_MINUTE: !Ref IPRetentionPeriodDeniedParam
+          IP_RETENTION_PERIOD_ALLOWED_MINUTE: !Ref IPRetentionPeriodAllowedParam
+          IP_RETENTION_PERIOD_DENIED_MINUTE: !Ref IPRetentionPeriodDeniedParam
           REMOVE_EXPIRED_IP_LAMBDA_ROLE_NAME: !Ref LambdaRoleRemoveExpiredIP
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 128
       Timeout: 300
     Metadata:
@@ -1506,7 +1904,7 @@ Resources:
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 512
       Timeout: 300
     Metadata:
@@ -1558,7 +1956,12 @@ Resources:
     Condition: HttpFloodAthenaLogParser
     Properties:
       Description: Security Automation - WAF Logs Athena parser
-      ScheduleExpression: !Join ['', ['rate(', !FindInMap ["Solution", "Athena", "QueryScheduledRunTime"], ' minutes)']]
+      ScheduleExpression: 
+        !If [
+          IsAthenaQueryRunEveryMinute,
+          "rate(1 minute)",
+          !Join ["", ["rate(", !Ref AthenaQueryRunTimeScheduleParam, " minutes)"]],
+        ]
       Targets:
         - Arn: !GetAtt LogParser.Arn
           Id: LogParser
@@ -1585,7 +1988,12 @@ Resources:
     Condition: ScannersProbesAthenaLogParser
     Properties:
       Description: Security Automation - App Logs Athena parser
-      ScheduleExpression: rate(5 minutes)
+      ScheduleExpression:
+        !If [
+          IsAthenaQueryRunEveryMinute,
+          "rate(1 minute)",
+          !Join ["", ["rate(", !Ref AthenaQueryRunTimeScheduleParam, " minutes)"]],
+        ]
       Targets:
         - Arn: !GetAtt LogParser.Arn
           Id: LogParser
@@ -1631,7 +2039,7 @@ Resources:
     Type: AWS::Events::Rule
     Condition: IPRetentionPeriod
     Properties:
-      Description: AWS WAF Security Automations - Events rule for setting IP retention
+      Description: Security Automations for AWS WAF - Events rule for setting IP retention
       EventPattern:
         source:
         - aws.wafv2
@@ -1673,12 +2081,12 @@ Resources:
         This lambda function checks third-party IP reputation lists hourly for new IP ranges to
         block. These lists include the Spamhaus Dont Route Or Peer (DROP) and Extended Drop (EDROP)
         lists, the Proofpoint Emerging Threats IP list, and the Tor exit node list.
-      Handler: 'reputation-lists.lambda_handler'
+      Handler: 'reputation_lists.lambda_handler'
       Role: !GetAtt LambdaRoleReputationListsParser.Arn
       Code:
         S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
         S3Key: !Join ['/', [!FindInMap ["SourceCode", "General", "KeyPrefix"], 'reputation_lists_parser.zip']]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 512
       Timeout: 300
       Environment:
@@ -1706,7 +2114,6 @@ Resources:
           reason: There is no need for Reserved Concurrency
         - id: W58
           reason: "Log permissions are defined in the LambdaRoleReputationListsParser policies"
-
 
   ReputationListsParserEventsRule:
     Condition: ReputationListsProtectionActivated
@@ -1762,7 +2169,7 @@ Resources:
       Description: >-
         This lambda function will intercepts and inspects trap endpoint requests to extract its IP
         address, and then add it to an AWS WAF block list.
-      Handler: 'access-handler.lambda_handler'
+      Handler: 'access_handler.lambda_handler'
       Role: !GetAtt LambdaRoleBadBot.Arn
       Code:
         S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
@@ -1784,7 +2191,7 @@ Resources:
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
           STACK_NAME: !Ref 'AWS::StackName'
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 128
       Timeout: 300
     Metadata:
@@ -1919,10 +2326,12 @@ Resources:
           -
             id: W86
             reason: "Leave the configuration of the expiration of the log data in CloudWatch log group to user due to potential compliance regulations."
+    Properties:
+      RetentionInDays: !If [LogGroupRetentionEnabled, !Ref LogGroupRetentionParam, !Ref 'AWS::NoValue']
 
   ApiGatewayBadBotCloudWatchRole:
     Type: AWS::IAM::Role
-    Condition: BadBotProtectionActivated
+    Condition: CreateApiGatewayBadBotCloudWatchRole
     Properties:
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
@@ -1952,7 +2361,7 @@ Resources:
       Type: AWS::ApiGateway::Account
       Condition: BadBotProtectionActivated
       Properties:
-        CloudWatchRoleArn: !GetAtt ApiGatewayBadBotCloudWatchRole.Arn
+        CloudWatchRoleArn: !If [CreateApiGatewayBadBotCloudWatchRole, !GetAtt ApiGatewayBadBotCloudWatchRole.Arn, !Ref ApiGatewayBadBotCWRoleParam] 
       DependsOn:
         - ApiGatewayBadBot
 
@@ -1960,9 +2369,9 @@ Resources:
     Type: 'AWS::Lambda::Function'
     Properties:
       Description: >-
-        This lambda function configures the Web ACL rules based on the features enabled in the
+        This lambda function configures the Web ACL rules based on the features activated in the
         CloudFormation template.
-      Handler: 'custom-resource.lambda_handler'
+      Handler: 'custom_resource.lambda_handler'
       Role: !GetAtt LambdaRoleCustomResource.Arn
       Code:
         S3Bucket: !Join ['-', [!FindInMap ["SourceCode", "General", "SourceBucket"], !Ref 'AWS::Region']]
@@ -1974,7 +2383,7 @@ Resources:
           SOLUTION_ID: !FindInMap [Solution, Data, SolutionID]
           METRICS_URL: !FindInMap [Solution, Data, MetricsURL]
           USER_AGENT_EXTRA: !FindInMap [Solution, UserAgent, UserAgentExtra]
-      Runtime: python3.8
+      Runtime: python3.10
       MemorySize: 128
       Timeout: 300
     Metadata:
@@ -1991,6 +2400,7 @@ Resources:
     Type: 'Custom::ConfigureAWSWAFLogs'
     Condition: HttpFloodProtectionLogParserActivated
     Properties:
+      SolutionVersion: "%VERSION%"
       ServiceToken: !GetAtt CustomResource.Arn
       WAFWebACLArn: !GetAtt WebACLStack.Outputs.WAFWebACLArn
       DeliveryStreamArn: !GetAtt FirehoseAthenaStack.Outputs.FirehoseWAFLogsDeliveryStreamArn
@@ -2001,12 +2411,14 @@ Resources:
     Properties:
       ServiceToken: !GetAtt CustomResource.Arn
       Region: !Ref 'AWS::Region'
+      SolutionVersion: "%VERSION%"
       AppAccessLogBucket: !Ref AppAccessLogBucket
+      AppAccessLogBucketPrefix: !Ref AppAccessLogBucketPrefixParam
       LogParser: !If [LogParser, !GetAtt LogParser.Arn, !Ref 'AWS::NoValue']
       ScannersProbesLambdaLogParser: !If [ScannersProbesLambdaLogParser, 'yes', 'no']
       ScannersProbesAthenaLogParser: !If [ScannersProbesAthenaLogParser, 'yes', 'no']
       MoveS3LogsForPartition: !If [ScannersProbesAthenaLogParser, !GetAtt MoveS3LogsForPartition.Arn, !Ref 'AWS::NoValue']
-      AccessLoggingBucket: !If [ScannersProbesProtectionActivated, !Ref AccessLoggingBucket, !Ref 'AWS::NoValue']
+      AccessLoggingBucket: !If [TurnOnAppAccessLogBucketLogging, !Ref AccessLoggingBucket, !Ref 'AWS::NoValue']
 
   ConfigureWafLogBucket:
     Type: 'Custom::ConfigureWafLogBucket'
@@ -2050,11 +2462,27 @@ Resources:
       ActivateScannersProbesProtectionParam: !Ref ActivateScannersProbesProtectionParam
       ActivateReputationListsProtectionParam: !Ref ActivateReputationListsProtectionParam
       ActivateBadBotProtectionParam: !Ref ActivateBadBotProtectionParam
+      ApiGatewayBadBotCWRoleParam: !If [ApiGatewayBadBotCWRoleNotExists, 'no', 'yes']
       ActivateAWSManagedRulesParam: !Ref ActivateAWSManagedRulesParam
+      ActivateAWSManagedAPParam: !Ref ActivateAWSManagedAPParam
+      ActivateAWSManagedKBIParam: !Ref ActivateAWSManagedKBIParam
+      ActivateAWSManagedIPRParam: !Ref ActivateAWSManagedIPRParam
+      ActivateAWSManagedAIPParam: !Ref ActivateAWSManagedAIPParam
+      ActivateAWSManagedSQLParam: !Ref ActivateAWSManagedSQLParam
+      ActivateAWSManagedLinuxParam: !Ref ActivateAWSManagedLinuxParam
+      ActivateAWSManagedPOSIXParam: !Ref ActivateAWSManagedPOSIXParam
+      ActivateAWSManagedWindowsParam: !Ref ActivateAWSManagedWindowsParam
+      ActivateAWSManagedPHPParam: !Ref ActivateAWSManagedPHPParam
+      ActivateAWSManagedWPParam: !Ref ActivateAWSManagedWPParam
       KeepDataInOriginalS3Location: !Ref KeepDataInOriginalS3Location
       IPRetentionPeriodAllowedParam: !Ref IPRetentionPeriodAllowedParam
       IPRetentionPeriodDeniedParam: !Ref IPRetentionPeriodDeniedParam
       SNSEmailParam: !If [SNSEmail, 'yes', 'no']
+      UserDefinedAppAccessLogBucketPrefixParam: !If [UserDefinedAppAccessLogBucketPrefix, 'yes', 'no']
+      AppAccessLogBucketLoggingStatusParam: !Ref AppAccessLogBucketLoggingStatusParam
+      RequestThresholdByCountryParam: !If [RequestThresholdByCountry, 'yes', 'no']
+      HTTPFloodAthenaQueryGroupByParam: !Ref HTTPFloodAthenaQueryGroupByParam
+      AthenaQueryRunTimeScheduleParam: !Ref AthenaQueryRunTimeScheduleParam
       # AWS WAF Web ACL
       WAFWebACL: !GetAtt WebACLStack.Outputs.WAFWebACL
       # AWS WAF IP Sets - ID
@@ -2172,7 +2600,7 @@ Resources:
     Type: AWS::SNS::Topic
     Condition: SNSEmail
     Properties:
-      DisplayName: 'AWS WAF Security Automations IP Expiration Notification'
+      DisplayName: 'Security Automations for AWS WAF IP Expiration Notification'
       TopicName: !Join ['-', ['AWS-WAF-Security-Automations-IP-Expiration-Notification', !GetAtt CreateUniqueID.UUID]]
       KmsMasterKeyId: alias/aws/sns
   
@@ -2284,10 +2712,10 @@ Resources:
         !Ref FirehoseAthenaStack
       ResourceType: CFN_STACK
 
-  DefaultApplicationAttributes:
+  DefaultApplicationAttributeGroup:
     Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
     Properties:
-      Name: !Sub '${AWS::Region}-${AWS::StackName}'
+      Name: !Sub 'AttrGrp-${AWS::Region}-${AWS::StackName}'
       Description: Attribute group for solution information.
       Attributes:       
         { "ApplicationType" : 'AWS-Solutions',
@@ -2300,30 +2728,42 @@ Resources:
     Type: AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation
     Properties:
       Application: !GetAtt Application.Id
-      AttributeGroup: !GetAtt DefaultApplicationAttributes.Id
+      AttributeGroup: !GetAtt DefaultApplicationAttributeGroup.Id
 
 Outputs:
   BadBotHoneypotEndpoint:
     Description: Bad Bot Honeypot Endpoint
-    Value: !Sub 'https://${ApiGatewayBadBot}.execute-api.${AWS::Region}.amazonaws.com/${ApiGatewayBadBotStage}'
+    Value: !Sub 'https://${ApiGatewayBadBot}.execute-api.${AWS::Region}.${AWS::URLSuffix}/${ApiGatewayBadBotStage}'
     Condition: BadBotProtectionActivated
+    Export:
+      Name: !Sub "${AWS::StackName}-BadBotHoneypotEndpoint"
 
   WAFWebACL:
     Description: AWS WAF WebACL
     Value: !GetAtt WebACLStack.Outputs.WAFWebACL
+    Export:
+      Name: !Sub "${AWS::StackName}-WAFWebACL"
 
   WAFWebACLArn:
     Description: AWS WAF WebACL Arn
     Value: !GetAtt WebACLStack.Outputs.WAFWebACLArn
+    Export:
+      Name: !Sub "${AWS::StackName}-WAFWebACLArn"
 
   WafLogBucket:
     Value: !Ref WafLogBucket
     Condition: HttpFloodProtectionLogParserActivated
+    Export:
+      Name: !Sub "${AWS::StackName}-WafLogBucket"
 
   AppAccessLogBucket:
     Value: !Ref AppAccessLogBucket
     Condition: ScannersProbesProtectionActivated
+    Export:
+      Name: !Sub "${AWS::StackName}-AppAccessLogBucket"
 
   SolutionVersion:
     Description: Solution Version Number
     Value: "%VERSION%"
+    Export:
+      Name: !Sub "${AWS::StackName}-SolutionVersion"

@@ -11,8 +11,6 @@
 #  and limitations under the License.                                                                                #
 ######################################################################################################################
 
-import json
-import logging
 from time import sleep
 from os import environ
 from datetime import datetime
@@ -20,6 +18,7 @@ from boto3.dynamodb.types import TypeDeserializer
 from lib.waflibv2 import WAFLIBv2
 from lib.sns_util import SNS
 from lib.solution_metrics import send_metrics
+from lib.logging_util import set_log_level
 
 
 waflib = WAFLIBv2()
@@ -144,8 +143,8 @@ class RemoveExpiredIP(object):
         
         notify = SNS(log)
         
-        subject = "AWS WAF Security Automations - IP Expiration Notification"
-        message = "You are receiving this email because you have configured IP retention in AWS WAF Security Automations. " \
+        subject = "Security Automations for AWS WAF - IP Expiration Notification"
+        message = "You are receiving this email because you have configured IP retention in Security Automations for AWS WAF. " \
                   "Expired IPs have been removed from the following IP set. For details, locate and view {} lambda logs using the " \
                   "timestamp below. \n\n" \
                   "IP set name: {}\n IP set id: {}\n IP retention period (minute): {}\n Region: {}\n UTC Time: {}" \
@@ -183,6 +182,7 @@ class RemoveExpiredIP(object):
             "ip_set": ip_set,
             "lambda_invocation_count": 1,
             "sns_email_notification": environ.get('SNS_EMAIL'),
+            "provisioner": environ.get('provisioner') if "provisioner" in environ else "cfn"
         }
 
         log.info("[remove_expired_ip: send_anonymous_usage_data] Send Data")
@@ -198,15 +198,9 @@ def lambda_handler(event, context):
     It is triggered by TTL DynamoDB Stream.
     """
     
-    log = logging.getLogger()
+    log = set_log_level()
     
     try:
-        # Set Log Level
-        log_level = str(environ['LOG_LEVEL'].upper())
-        if log_level not in ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']:
-            log_level = 'ERROR'
-        log.setLevel(log_level)
-    
         log.info('[remove_expired_id: lambda_handler] Start')
         log.info("Lambda Handler Event: \n{}".format(event))
         

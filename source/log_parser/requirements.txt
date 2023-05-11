@@ -1,2 +1,2 @@
-backoff>=2.2.1
-requests>=2.28.2
+backoff~=2.2.1
+requests~=2.28.2

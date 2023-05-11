@@ -1,5 +1,5 @@
 ##############################################################################
-#  Copyright 2020 Amazon.com, Inc. or its affiliates. All Rights Reserved.   #
+#  Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.   #
 #                                                                            #
 #  Licensed under the Apache License, Version 2.0 (the "License").           #
 #  You may not use this file except in compliance                            #
@@ -14,6 +14,7 @@
 ##############################################################################
 
 import datetime
+import json
 
 
 def build_athena_query_for_app_access_logs(
@@ -69,7 +70,7 @@ def build_athena_query_for_app_access_logs(
             log, start_timestamp, end_timestamp)
     query_string = query_string +  \
         build_athena_query_part_three_for_app_access_logs(
-            log, error_threshold, start_timestamp, end_timestamp)
+            log, error_threshold, start_timestamp)
 
     log.info(
         "[build_athena_query_for_app_access_logs]  \
@@ -83,7 +84,9 @@ def build_athena_query_for_app_access_logs(
 
 def build_athena_query_for_waf_logs(
     log, database_name, table_name, end_timestamp,
-        waf_block_period, request_threshold):
+        waf_block_period, request_threshold,
+        request_threshold_by_country,
+        group_by, athena_query_run_schedule):
     """
     This function dynamically builds athena query
     for cloudfront logs by adding partition values:
@@ -98,6 +101,8 @@ def build_athena_query_for_waf_logs(
         end_timestamp: datetime. The end time stamp of the logs being scanned
         waf_block_period: int. The period (in minutes) to block applicable IP addresses
         request_threshold: int. The maximum acceptable bad requests per minute per IP address
+        request_threshold_by_country: The maximum acceptable bad requests per minute per Country
+        athena_query_run_schedule: The Athena query run schedule (in minutes) set in EventBridge events rule
 
     Returns:
         Athena query string
@@ -123,14 +128,21 @@ def build_athena_query_for_waf_logs(
         "[build_athena_query_for_waf_logs]  \
             Build query")
     # --------------------------------------------------
+    additional_columns_group_one, additional_columns_group_two \
+        = build_select_group_by_columns_for_waf_logs(
+            log, group_by, request_threshold_by_country)
     query_string = build_athena_query_part_one_for_waf_logs(
-        log, database_name, table_name)
+        log, database_name, table_name, 
+        additional_columns_group_one,
+        additional_columns_group_two)
     query_string = query_string +  \
         build_athena_query_part_two_for_partition(
             log, start_timestamp, end_timestamp)
     query_string = query_string +  \
         build_athena_query_part_three_for_waf_logs(
-            log, request_threshold, start_timestamp, end_timestamp)
+            log, request_threshold, request_threshold_by_country,
+            athena_query_run_schedule, additional_columns_group_two,
+            start_timestamp)
 
     log.info(
         "[build_athena_query_for_waf_logs]  \
@@ -206,8 +218,52 @@ def build_athena_query_part_one_for_alb_logs(
     return query_string
 
 
+def build_select_group_by_columns_for_waf_logs(
+        log, group_by, request_threshold_by_country):
+    """
+    This function dynamically builds user selected additional columns
+    in select and group by statement of the athena query.
+
+    Args:
+        log: logging object
+        group_by: string. The group by columns (country, uri or both) selected by user
+
+    Returns:
+        string of columns
+    """
+    
+    additional_columns_group_one = ''
+    additional_columns_group_two = ''
+
+    if group_by.lower() == 'country' or \
+        (group_by.lower() == 'none' and len(request_threshold_by_country) > 0) :
+        additional_columns_group_one = 'httprequest.country as country,'
+        additional_columns_group_two = ', country'
+    elif group_by.lower() == 'uri':
+        # Add country if threshold by country is configured
+        additional_columns_group_one =  \
+            'httprequest.uri as uri,'   \
+            if len(request_threshold_by_country) == 0   \
+            else 'httprequest.country as country, httprequest.uri as uri,'
+        additional_columns_group_two =  \
+            ', uri' \
+            if len(request_threshold_by_country) == 0   \
+            else ', country, uri'
+    elif group_by.lower() == 'country and uri':
+        additional_columns_group_one = 'httprequest.country as country, httprequest.uri as uri,'
+        additional_columns_group_two = ', country, uri'
+
+    log.debug(
+        "[build_select_group_by_columns_for_waf_logs]  \
+         Additional columns group one: %s\nAdditional columns group two: %s"
+         %(additional_columns_group_one, additional_columns_group_two))
+    return additional_columns_group_one, additional_columns_group_two
+
+
 def build_athena_query_part_one_for_waf_logs(
-        log, database_name, table_name):
+        log, database_name, table_name,
+        additional_columns_group_one,
+        additional_columns_group_two):
     """
     This function dynamically builds the first part
     of the athena query.
@@ -221,12 +277,12 @@ def build_athena_query_part_one_for_waf_logs(
         Athena query string
     """
     query_string = "SELECT\n" \
-                        "\tclient_ip,\n" \
+                        "\tclient_ip" + additional_columns_group_two + ",\n" \
                         "\tMAX_BY(counter, counter) as max_counter_per_min\n"  \
                    " FROM (\n"  \
                       "\tWITH logs_with_concat_data AS (\n"  \
                         "\t\tSELECT\n"  \
-                          "\t\t\thttprequest.clientip as client_ip,\n"  \
+                          "\t\t\thttprequest.clientip as client_ip," + additional_columns_group_one + "\n"  \
                           "\t\t\tfrom_unixtime(timestamp/1000) as datetime\n"  \
                         "\t\tFROM\n" \
                         + "\t\t\t" \
@@ -310,7 +366,7 @@ def build_athena_query_part_two_for_partition(
 
 
 def build_athena_query_part_three_for_app_access_logs(
-        log, error_threshold, start_timestamp, end_timestamp):
+        log, error_threshold, start_timestamp):
     """
     This function dynamically builds the third part
     of the athena query.
@@ -319,7 +375,6 @@ def build_athena_query_part_three_for_app_access_logs(
         log: logging object
         error_threshold: int. The maximum acceptable bad requests per minute per IP address
         start_timestamp: datetime. The start time stamp of the logs being scanned
-        end_timestamp: datetime. The end time stamp of the logs being scanned
 
     Returns:
         Athena query string
@@ -351,25 +406,73 @@ def build_athena_query_part_three_for_app_access_logs(
     return query_string
 
 
+def build_having_clause_for_waf_logs(
+        log, default_request_threshold,
+        request_threshold_by_country,
+        athena_query_run_schedule):
+    """
+    This function dynamically builds having clause of the athena query.
+
+    Args:
+        log: logging object
+        group_by: json string. request thresholds for countries configured by user
+
+    Returns:
+        string of having clause
+    """
+    request_threshold_calculated = default_request_threshold / athena_query_run_schedule
+
+    having_clause_string = "\t\tCOUNT(*) >= " + str(request_threshold_calculated)
+
+    if len(request_threshold_by_country) > 0 :
+        having_clause_string = ''
+        not_in_country_string = ''
+
+        request_threshold_by_country_json = json.loads(request_threshold_by_country)
+        for country in request_threshold_by_country_json:
+            request_threshold_for_country = request_threshold_by_country_json[country]
+            request_threshold_for_country_calculated = request_threshold_for_country / athena_query_run_schedule
+            request_threshold_for_country_string = "\t\t(COUNT(*) >= " + str(request_threshold_for_country_calculated) + " AND country = '" +  country + "') OR \n"
+            having_clause_string += request_threshold_for_country_string
+            not_in_country_string += "'" + country + "',"
+
+        # Remove last comma and add closing parentheses
+        not_in_country_string = not_in_country_string[:-1] + "))"
+        not_in_country_prefix = "\t\t(COUNT(*) >= " + str(request_threshold_calculated) + " AND country NOT IN ("
+        request_threshold_for_others_string = not_in_country_prefix + not_in_country_string
+        having_clause_string = having_clause_string + request_threshold_for_others_string
+
+    log.debug(
+        "[build_select_group_by_columns_for_waf_logs]  \
+         Having clause: %s"%having_clause_string)
+    return having_clause_string
+
+
 def build_athena_query_part_three_for_waf_logs(
-        log, request_threshold, start_timestamp, end_timestamp):
+        log, default_request_threshold, request_threshold_by_country,
+        athena_query_run_schedule, additional_columns_group_two,
+        start_timestamp):
     """
     This function dynamically builds the third part
     of the athena query.
 
     Args:
         log: logging object
-        error_threshold: int. The maximum acceptable bad requests per minute per IP address
+        request_threshold: int. The maximum acceptable count of requests per IP address within the scheduled query run interval (default 5 minutes)
         start_timestamp: datetime. The start time stamp of the logs being scanned
-        end_timestamp: datetime. The end time stamp of the logs being scanned
+        request_threshold_by_country: json string. The maximum acceptable count of requests per IP address per specified country within the scheduled query run interval (default 5 minutes)
+        athena_query_run_schedule: int. The Athena query run schedule (in minutes) set in EventBridge events rule
 
     Returns:
         Athena query string
     """
-    request_threshold_calculated = request_threshold / 5
+    having_clause = build_having_clause_for_waf_logs(
+                        log, default_request_threshold, request_threshold_by_country,
+                        athena_query_run_schedule)
+
     query_string = "\n\t)\n"  \
                    "\tSELECT\n"  \
-                   "\t\tclient_ip,\n"  \
+                   "\t\tclient_ip" + additional_columns_group_two + ",\n"  \
                    "\t\tCOUNT(*) as counter\n"  \
                    "\tFROM\n"  \
                    "\t\tlogs_with_concat_data\n"  \
@@ -377,13 +480,12 @@ def build_athena_query_part_three_for_waf_logs(
                    "\t\tdatetime > TIMESTAMP "  \
                    + "'" + str(start_timestamp)[0:19] + "'"\
                    "\n\tGROUP BY\n"  \
-                   "\t\tclient_ip,\n"  \
+                   "\t\tclient_ip" + additional_columns_group_two + ",\n"  \
                    "\t\tdate_trunc('minute', datetime)\n"  \
                    "\tHAVING\n"  \
-                   "\t\tCOUNT(*) >= "  \
-                   + str(request_threshold_calculated) + \
+                   + having_clause + \
                    "\n) GROUP BY\n"  \
-                   "\tclient_ip\n"  \
+                   "\tclient_ip" + additional_columns_group_two + "\n"  \
                    "ORDER BY\n" \
                    "\tmax_counter_per_min DESC\n" \
                    "LIMIT 10000;"
