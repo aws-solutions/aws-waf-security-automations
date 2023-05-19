@@ -54,3 +54,4 @@ urllib*
 
 # Ignore lib folder within each lambada folder. Only include lib folder at upper level
 /source/**/lib
+!/source/lib
