@@ -159,14 +159,14 @@ class RemoveExpiredIP(object):
         
         log.info('[remove_expired_id: send_notification] An email notfication about the IP Expiration has been successfully sent to the user. End.')
     
-    def send_anonymous_usage_data(self, log, remove_ip_list, name):
+    def send_anonymized_usage_data(self, log, remove_ip_list, name):
         """
-        Send anonymous solution metrics
+        Send anonymized solution metrics
         """
-        if 'SEND_ANONYMOUS_USAGE_DATA' not in environ or environ.get('SEND_ANONYMOUS_USAGE_DATA').lower() != 'yes':
+        if 'SEND_ANONYMIZED_USAGE_DATA' not in environ or environ.get('SEND_ANONYMIZED_USAGE_DATA').lower() != 'yes':
             return
 
-        log.info("[remove_expired_ip: send_anonymous_usage_data] Start")
+        log.info("[remove_expired_ip: send_anonymized_usage_data] Start")
 
         # Get ip set category
         if 'Whitelist' in name:
@@ -185,12 +185,12 @@ class RemoveExpiredIP(object):
             "provisioner": environ.get('provisioner') if "provisioner" in environ else "cfn"
         }
 
-        log.info("[remove_expired_ip: send_anonymous_usage_data] Send Data")
+        log.info("[remove_expired_ip: send_anonymized_usage_data] Send Data")
 
         response = send_metrics(data=usage_data)
         response_code = response.status_code
-        log.info('[remove_expired_ip: send_anonymous_usage_data] Response Code: {}'.format(response_code))
-        log.info("[remove_expired_ip: send_anonymous_usage_data] End")
+        log.info('[remove_expired_ip: send_anonymized_usage_data] Response Code: {}'.format(response_code))
+        log.info("[remove_expired_ip: send_anonymized_usage_data] End")
     
 def lambda_handler(event, context):
     """
@@ -242,8 +242,8 @@ def lambda_handler(event, context):
             if (environ.get('SNS_EMAIL').lower() == 'yes' and response.get('ResponseMetadata',{}).get('HTTPStatusCode') == 200):
                 response = reip.send_notification(log, environ.get('SNS_TOPIC_ARN'), name, ip_set_id, ip_retention_period, context.function_name)
         
-            # send anonymous solution metrics
-            reip.send_anonymous_usage_data(log, remove_ip_list, name)
+            # send anonymized solution metrics
+            reip.send_anonymized_usage_data(log, remove_ip_list, name)
 
     except Exception as error:
         log.error(str(error))

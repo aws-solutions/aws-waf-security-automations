@@ -75,7 +75,7 @@ def process_url_list(log, current_list):
                 process_list.append(IPv4Network(source_ip).with_prefixlen)
             elif (ip_type == "IPV6"):
                 process_list.append(IPv6Network(source_ip).with_prefixlen)
-        except:
+        except Exception:
             try:
                 if (ip_network(source_ip)):
                     process_list.append(source_ip)
@@ -148,12 +148,12 @@ def get_ip_reputation_usage_data(log, scope, ipset_name,
     return usage_data
 
 
-def send_anonymous_usage_data(log, scope):
+def send_anonymized_usage_data(log, scope):
     try:
-        if 'SEND_ANONYMOUS_USAGE_DATA' not in os.environ or os.getenv('SEND_ANONYMOUS_USAGE_DATA').lower() != 'yes':
+        if 'SEND_ANONYMIZED_USAGE_DATA' not in os.environ or os.getenv('SEND_ANONYMIZED_USAGE_DATA').lower() != 'yes':
             return
 
-        log.debug("[send_anonymous_usage_data] Start")
+        log.debug("[send_anonymized_usage_data] Start")
         cw = WAFCloudWatchMetrics(log)
         usage_data = initialize_usage_data()
 
@@ -206,13 +206,13 @@ def send_anonymous_usage_data(log, scope):
         )
 
         # Send usage data
-        log.info('[send_anonymous_usage_data] Send usage data: \n{}'.format(usage_data))
+        log.info('[send_anonymized_usage_data] Send usage data: \n{}'.format(usage_data))
         response = send_metrics(data=usage_data)
         response_code = response.status_code
-        log.debug('[send_anonymous_usage_data] Response Code: {}'.format(response_code))
-        log.debug("[send_anonymous_usage_data] End")
+        log.debug('[send_anonymized_usage_data] Response Code: {}'.format(response_code))
+        log.debug("[send_anonymized_usage_data] End")
     except Exception:
-        log.debug("[send_anonymous_usage_data] Failed to send data")
+        log.debug("[send_anonymized_usage_data] Failed to send data")
 
 
 # ======================================================================================================================
@@ -258,14 +258,16 @@ def lambda_handler(event, context):
                     current_list = read_url_list(log, current_list, info["url"], info["prefix"])
                 else:
                     current_list = read_url_list(log, current_list, info["url"])
-            except:
+            except Exception as e:
+                log.error(e)
                 log.error("URL info not valid %s", info)
+                
 
         current_list = sorted(current_list, key=str)
         current_list = process_url_list(log, current_list)
 
         populate_ipsets(log, scope, ipset_name_v4, ipset_name_v6, ipset_arn_v4, ipset_arn_v6, current_list)
-        send_anonymous_usage_data(log, scope)
+        send_anonymized_usage_data(log, scope)
 
     except Exception as error:
         log.error(str(error))
@@ -282,4 +284,4 @@ def lambda_handler(event, context):
             log.info("ResourceId %s", resource_id)
             send_response(log, event, context, response_status, response_data, resource_id, reason)
 
-        return json.dumps(result)
+        return json.dumps(result) #NOSONAR needed to send a response of the result

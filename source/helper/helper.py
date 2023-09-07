@@ -73,4 +73,4 @@ def lambda_handler(event, context):
         if 'ResponseURL' in event:
             send_response(log, event, context, response_status, response_data, resource_id, reason)
 
-        return json.dumps(result)
+        return json.dumps(result) #NOSONAR needed to send a response of the result

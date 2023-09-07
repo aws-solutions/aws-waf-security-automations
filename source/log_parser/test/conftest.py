@@ -74,7 +74,7 @@ def test_environment_vars_setup():
     environ['METRIC_NAME_PREFIX'] = 'waf_stack'
     environ['MAX_AGE_TO_UPDATE'] = '30'
     environ['LOG_LEVEL'] = 'INFO'
-    environ['SEND_ANONYMOUS_USAGE_DATA'] = 'Yes'
+    environ['SEND_ANONYMIZED_USAGE_DATA'] = 'Yes'
     environ['UUID'] = 'test_uuid'
     environ['SOLUTION_ID'] = 'SO0006'
     environ['METRICS_URL'] = 'https://testurl.com/generic'

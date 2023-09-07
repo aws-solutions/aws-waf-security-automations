@@ -12,16 +12,47 @@
 ######################################################################################################################
 
 import json
-from resource_manager import ResourceManager
-from log_group_retention import LogGroupRetention
 from lib.cfn_response import send_response
 from lib.logging_util import set_log_level
+from operations import (
+    operation_types,
+    set_log_group_retention,
+    config_app_access_log_bucket,
+    config_waf_log_bucket,
+    config_web_acl,
+    config_aws_waf_logs,
+    generate_app_log_parser_conf,
+    generate_waf_log_parser_conf,
+    add_athena_partitions
+)
+from operations.operation_types import RESOURCE_TYPE
+
+operations_dictionary = {
+    operation_types.SET_CLOUDWATCH_LOGGROUP_RETENTION: set_log_group_retention.execute,
+    operation_types.CONFIG_AWS_WAF_LOGS: config_aws_waf_logs.execute,
+    operation_types.CONFIG_APP_ACCESS_LOG_BUCKET: config_app_access_log_bucket.execute,
+    operation_types.CONFIG_WAF_LOG_BUCKET: config_waf_log_bucket.execute,
+    operation_types.CONFIG_WEB_ACL: config_web_acl.execute,
+    operation_types.GENERATE_APP_LOG_PARSER_CONF_FILE: generate_app_log_parser_conf.execute,
+    operation_types.GENERATE_WAF_LOG_PARSER_CONF_FILE: generate_waf_log_parser_conf.execute,
+    operation_types.ADD_ATHENA_PARTITIONS: add_athena_partitions.execute
+}
+
+class UnSupportedOperationTypeException(Exception):
+    pass
+
+def get_function_for_resource(resource, log):
+    try:
+        return operations_dictionary[resource]
+    except KeyError as key_error:
+        log.error(key_error)
+        raise UnSupportedOperationTypeException(f"The operation {resource} is not supported")
+
 
 # ======================================================================================================================
 # Lambda Entry Point
 # ======================================================================================================================
-def lambda_handler(event, context):
-    
+def lambda_handler(event, context):    
     log = set_log_level()
     response_status = 'SUCCESS'
     reason = None
@@ -31,7 +62,6 @@ def lambda_handler(event, context):
         'StatusCode': '200',
         'Body': {'message': 'success'}
     }
-    resource_manager = ResourceManager(log=log)
     
     log.info(f'context: {context}')
     
@@ -46,87 +76,9 @@ def lambda_handler(event, context):
         # ----------------------------------------------------------
         # Process event
         # ----------------------------------------------------------
-
-        if event['ResourceType'] == "Custom::SetCloudWatchLogGroupRetention" and request_type in {'UPDATE', 'CREATE'}:
-            log_group_retention = LogGroupRetention(log)
-            log_group_retention.update_retention(
-                event=event
-            )
-
-        if event['ResourceType'] == "Custom::ConfigureAppAccessLogBucket":
-            if 'CREATE' in request_type:
-                resource_manager.configure_s3_bucket(event)
-                app_access_params = resource_manager.get_params_app_access_create_event(event)
-                resource_manager.add_s3_bucket_lambda_event(**app_access_params)
-
-            elif 'UPDATE' in request_type:
-                resource_manager.configure_s3_bucket(event)
-                if resource_manager.contains_old_app_access_resources(event):
-                    resource_manager.update_app_access_log_bucket(event)
-
-            elif 'DELETE' in request_type:
-                bucket_lambda_params = resource_manager.get_params_app_access_delete_event(event)
-                resource_manager.remove_s3_bucket_lambda_event(**bucket_lambda_params)
-                
-
-        elif event['ResourceType'] == "Custom::ConfigureWafLogBucket":
-            if 'CREATE' in request_type:
-                waf_params = resource_manager.get_params_waf_event(event)
-                resource_manager.add_s3_bucket_lambda_event(**waf_params)
-
-            elif 'UPDATE' in request_type:
-                if resource_manager.waf_has_old_resources(event):
-                    resource_manager.update_waf_log_bucket(event)
-
-            elif 'DELETE' in request_type:
-                bucket_lambda_params = resource_manager.get_params_bucket_lambda_delete_event(event)
-                resource_manager.remove_s3_bucket_lambda_event(**bucket_lambda_params)
-
-
-        elif event['ResourceType'] == "Custom::ConfigureWebAcl":
-            # Manually delete ip sets to avoid throttling occurred during stack deletion due to API call limit 
-            if 'DELETE' in request_type:
-                resource_manager.delete_ip_sets(event)
-            resource_manager.send_anonymous_usage_data(event['RequestType'], event.get('ResourceProperties', {}))
-
-
-        elif event['ResourceType'] == "Custom::ConfigureAWSWAFLogs":
-            if 'CREATE' in request_type:
-                resource_manager.put_logging_configuration(event)
-
-            elif 'UPDATE' in request_type:
-                resource_manager.delete_logging_configuration(event)
-                resource_manager.put_logging_configuration(event)
-
-            elif 'DELETE' in request_type:
-                resource_manager.delete_logging_configuration(event)
-
-
-        elif event['ResourceType'] == "Custom::GenerateAppLogParserConfFile":
-            if 'CREATE' in request_type:
-                resource_manager.generate_app_log_parser_conf_file(event, overwrite=True)
-                
-            elif 'UPDATE' in request_type:
-                resource_manager.generate_app_log_parser_conf_file(event, overwrite=False)
-
-            # DELETE: do nothing
-
-
-        elif event['ResourceType'] == "Custom::GenerateWafLogParserConfFile":
-            if 'CREATE' in request_type:
-                resource_manager.generate_waf_log_parser_conf_file(event, overwrite=True)
-                
-            elif 'UPDATE' in request_type:
-                resource_manager.generate_waf_log_parser_conf_file(event, overwrite=False)
-
-            # DELETE: do nothing
-
-
-        elif event['ResourceType'] == "Custom::AddAthenaPartitions":
-            if 'CREATE' in request_type or 'UPDATE' in request_type:
-                resource_manager.add_athena_partitions(event)
-
-            # DELETE: do nothing
+        operation = get_function_for_resource(event[RESOURCE_TYPE], log)
+        if operation:
+            operation(event, context, log)
 
     except Exception as error:
         log.error(error)
@@ -144,4 +96,4 @@ def lambda_handler(event, context):
         if 'ResponseURL' in event:
             send_response(log, event, context, response_status, response_data, resource_id, reason)
 
-        return json.dumps(result)
+        return json.dumps(result) #NOSONAR needed to send a response of the result

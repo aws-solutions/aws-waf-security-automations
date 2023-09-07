@@ -43,8 +43,8 @@ def test_initialize_usage_data():
     }
     assert result == expected
 
-def test_send_anonymous_usage_data(cloudwatch_client, expected_cw_resp):
-    result = send_anonymous_usage_data(
+def test_send_anonymized_usage_data(cloudwatch_client, expected_cw_resp):
+    result = send_anonymized_usage_data(
         log=log,
         scope='ALB',
         ipset_name_v4='ipset_name_v4',

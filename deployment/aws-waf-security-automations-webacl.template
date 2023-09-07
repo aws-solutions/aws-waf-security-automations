@@ -1,14 +1,23 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
-# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License").
+# You may not use this file except in compliance with the License.
+# A copy of the License is located at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# or in the "license" file accompanying this file. This file is distributed
+# on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either
+# express or implied. See the License for the specific language governing
+# permissions and limitations under the License.
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-WebACL) - Security Automations for AWS WAF %VERSION%: This AWS CloudFormation template helps
+  (SO0006-WebACL) - Security Automations for AWS WAF: This AWS CloudFormation template helps
   you provision the Security Automations for AWS WAF stack without worrying about creating and
   configuring the underlying AWS infrastructure.
-
   **WARNING** This template creates an AWS WAF Web ACL and Amazon CloudWatch custom metrics.
-  You will be billed for the AWS resources used if you create a stack from this template.
+  You will be billed for the AWS resources used if you create a stack from this template. %VERSION%
 
 Parameters:
   ActivateAWSManagedRulesParam:

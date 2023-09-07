@@ -132,7 +132,7 @@ cd "$source_dir"/custom_resource || exit 1
 mkdir -p lib
 echo "cp $source_dir/lib/waflibv2.py $source_dir/lib/solution_metrics.py $source_dir/lib/boto3_util.py $source_dir/lib/s3_util.py $source_dir/lib/cfn_response.py  $source_dir/lib/logging_util.py lib"
 cp -rf "$source_dir"/lib/waflibv2.py "$source_dir"/lib/solution_metrics.py "$source_dir"/lib/boto3_util.py "$source_dir"/lib/s3_util.py "$source_dir"/lib/cfn_response.py "$source_dir"/lib/logging_util.py lib
-zip -g -r "$build_dist_dir"/custom_resource.zip custom_resource.py resource_manager.py log_group_retention.py lib
+zip -g -r "$build_dist_dir"/custom_resource.zip custom_resource.py resource_manager.py log_group_retention.py lib operations
 
 
 echo "------------------------------------------------------------------------------"

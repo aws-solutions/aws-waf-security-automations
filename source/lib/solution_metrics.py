@@ -25,12 +25,13 @@ log.setLevel('INFO')
 def send_metrics(data,
                  uuid=os.getenv('UUID'),
                  solution_id=os.getenv('SOLUTION_ID'),
-                 url=os.getenv('METRICS_URL')):
-    """Sends anonymous customer metrics to s3 via API gateway owned and
+                 url=os.getenv('METRICS_URL'),
+                 version=os.getenv('Version')):
+    """Sends anonymized customer metrics to s3 via API gateway owned and
         managed by the Solutions Builder team.
 
     Args:
-        data - anonymous customer metrics to be sent
+        data - anonymized customer metrics to be sent
         uuid - uuid of the solution
         solution_id: unique id of the solution
         url: url for API Gateway via which data is sent
@@ -42,7 +43,8 @@ def send_metrics(data,
             "Solution": solution_id,
             "UUID": uuid,
             "TimeStamp": str(datetime.utcnow().isoformat()),
-            "Data": data
+            "Data": data,
+            "Version": version
             }
         json_data = dumps(metrics_data)
         headers = {'content-type': 'application/json'}

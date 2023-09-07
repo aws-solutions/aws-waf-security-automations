@@ -68,8 +68,8 @@ def test_configure_waf_log_bucket_delete_event(configure_waf_log_bucket_delete_e
     expected = successful_response
     assert result == expected
 
-def test_configure_app_access_log_bucket_create_event(configure_app_access_log_bucket_create_event, example_context, s3_bucket, s3_client, app_access_log_bucket_create_event_error_response):
-    result = lambda_handler(configure_app_access_log_bucket_create_event, example_context)
+def test_configure_app_access_log_bucket_create_event(configure_app_access_log_bucket_create_error_event, example_context, s3_bucket, s3_client, app_access_log_bucket_create_event_error_response):
+    result = lambda_handler(configure_app_access_log_bucket_create_error_event, example_context)
     expected = app_access_log_bucket_create_event_error_response
     assert result == expected
 

@@ -21,7 +21,7 @@ from urllib.parse import urlparse
 from lib.waflibv2 import WAFLIBv2
 from lib.s3_util import S3
 
-TMP_DIR = '/tmp/'
+TMP_DIR = '/tmp/' #NOSONAR tmp use for an insensitive workspace
 FORMAT_DATE_TIME = "%Y-%m-%d %H:%M:%S %Z%z"
 
 class LambdaLogParser(object):
@@ -122,35 +122,10 @@ class LambdaLogParser(object):
         with gzip.open(local_file_path, 'r') as content:
             for line in content:
                 try:  
-                    request_key = ""
-                    uri = ""
-                    return_code_index = None
+                    oreq = self.read_contents(line, log_type, outstanding_requesters, counter)
+                    if oreq: 
+                        return oreq
 
-                    if log_type == 'waf':
-                        request_key, uri, line_data = self.read_waf_log_file(line)
-                    elif log_type == 'alb':
-                        line = line.decode('utf8')
-                        if line.startswith('#'):
-                            continue
-                        request_key, uri, return_code_index, line_data = \
-                            self.read_alb_log_file(line)
-                    elif log_type == 'cloudfront':
-                        line = line.decode('utf8')
-                        if line.startswith('#'):
-                            continue
-                        request_key, uri, return_code_index, line_data = \
-                            self.read_cloudfront_log_file(line)
-                    else:
-                        return outstanding_requesters
-                    
-                    if 'ignoredSufixes' in self.config['general'] and uri.endswith(
-                            tuple(self.config['general']['ignoredSufixes'])):
-                        self.log.debug(
-                            "[lambda_log_parser: get_outstanding_requesters] Skipping line %s. Included in ignoredSufixes." % line)
-                        continue
-
-                    counter = self.update_threshold_counter(request_key, uri, return_code_index, line_data, counter)
-                    
                 except Exception as e:
                     error_count += 1
                     self.log.error("[lambda_log_parser: get_outstanding_requesters] Error to process line: %s" % line)
@@ -160,7 +135,38 @@ class LambdaLogParser(object):
         remove(local_file_path)
         return counter, outstanding_requesters
 
+
+    def read_contents(self, line, log_type, outstanding_requesters, counter):
+        request_key = ""
+        uri = ""
+        return_code_index = None
+
+        if log_type == 'waf':
+            request_key, uri, line_data = self.read_waf_log_file(line)
+        elif log_type == 'alb':
+            line = line.decode('utf8')
+            if line.startswith('#'):
+                return
+            request_key, uri, return_code_index, line_data = \
+                self.read_alb_log_file(line)
+        elif log_type == 'cloudfront':
+            line = line.decode('utf8')
+            if line.startswith('#'):
+                return
+            request_key, uri, return_code_index, line_data = \
+                self.read_cloudfront_log_file(line)
+        else:
+            return outstanding_requesters
+        
+        if 'ignoredSufixes' in self.config['general'] and uri.endswith(
+                tuple(self.config['general']['ignoredSufixes'])):
+            self.log.debug(
+                "[lambda_log_parser: get_outstanding_requesters] Skipping line %s. Included in ignoredSufixes." % line)
+            return
+
+        counter = self.update_threshold_counter(request_key, uri, return_code_index, line_data, counter)
     
+
     def parse_log_file(self, bucket_name, key_name, log_type):
         self.log.debug("[lambda_log_parser: parse_log_file] Start")
 
@@ -204,23 +210,28 @@ class LambdaLogParser(object):
         for uri in counter['uriList'].keys():
             for k, num_reqs in counter['uriList'][uri].items():
                 try:
-                    k = k.split(' ')[-1]
-                    if num_reqs >= self.config['uriList'][uri][threshold]:
-                        if uri not in outstanding_requesters['uriList'].keys():
-                            outstanding_requesters['uriList'][uri] = {}
-
-                        if k not in outstanding_requesters['uriList'][uri].keys() or num_reqs > \
-                                outstanding_requesters['uriList'][uri][k]['max_counter_per_min']:
-                            outstanding_requesters['uriList'][uri][k] = {
-                                'max_counter_per_min': num_reqs,
-                                'updated_at': utc_now_timestamp_str
-                            }
+                    self.populate_urilist_outstanding_requesters(
+                        k, num_reqs, uri, threshold, outstanding_requesters, utc_now_timestamp_str)
                 except Exception:
                     self.log.error(
                         "[lambda_log_parser: get_urilist_outstanding_requesters] \
                         Error to process outstanding requester:(%s) %s" % (uri, k))
 
         return outstanding_requesters
+    
+
+    def populate_urilist_outstanding_requesters(self, k, num_reqs, uri, threshold, outstanding_requesters, utc_now_timestamp_str):
+        k = k.split(' ')[-1]
+        if num_reqs >= self.config['uriList'][uri][threshold]:
+            if uri not in outstanding_requesters['uriList'].keys():
+                outstanding_requesters['uriList'][uri] = {}
+
+            if k not in outstanding_requesters['uriList'][uri].keys() or num_reqs > \
+                    outstanding_requesters['uriList'][uri][k]['max_counter_per_min']:
+                outstanding_requesters['uriList'][uri][k] = {
+                    'max_counter_per_min': num_reqs,
+                    'updated_at': utc_now_timestamp_str
+                }
  
 
     def get_outstanding_requesters(self, log_type, counter, outstanding_requesters):

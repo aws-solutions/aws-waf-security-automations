@@ -51,13 +51,4 @@ cffi under the MIT License
 six under the MIT License
 types-PyYAML under the Apache Software License 
 MarkupSafe under the BSD-3-Clause
-
-
-
-
-
-
-
-
-
-
+typing_extensions under the PSF License and BSD License
