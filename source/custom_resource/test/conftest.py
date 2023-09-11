@@ -92,6 +92,28 @@ def configure_cloud_watch_group_retention_event():
         'StackId': 'arn:aws:cloudformation:us-east-2:XXXXXXXXXXXX:stack/wafohio/70c177d0-e2c7-11ed-9e83-02ff465f0e71'
     }
 
+@pytest.fixture(scope="session")
+def configure_app_access_log_bucket_create_error_event():
+    return {
+        'LogicalResourceId': 'ConfigureAppAccessLogBucket',
+        'RequestId': 'ed758acd-e94b-4f2b-9a3a-935efb325f91',
+        'RequestType': 'Create',
+        'ResourceProperties': {
+            'AccessLoggingBucket': '',
+            'AppAccessLogBucket': 'wiq424231042-wafohio-wiq424231042',
+            'AppAccessLogBucketPrefix': 'AWSLogs/',
+            'LogParser': 'arn:aws:lambda:us-east-2:XXXXXXXXXXXX:function:wafohio-LogParser-jjx2HJSF27ji',
+            'MoveS3LogsForPartition': 'arn:aws:lambda:us-east-2:XXXXXXXXXXXX:function:wafohio-MoveS3LogsForPartition-EkJByFiC8sHw',
+            'Region': 'us-east-2',
+            'ScannersProbesAthenaLogParser': 'yes',
+            'ScannersProbesLambdaLogParser': 'no',
+            'ServiceToken': 'arn:aws:lambda:us-east-2:XXXXXXXXXXXX:function:wafohio-CustomResource-WnfNLnBqtXPF'
+        },
+        'ResourceType': 'Custom::ConfigureAppAccessLogBucket',
+        'ResponseURL': 'https://cloudformation-custom-resource-response-useast2.s3.us-east-2.amazonaws.com/',
+        'ServiceToken': 'arn:aws:lambda:us-east-2:XXXXXXXXXXXX:function:wafohio-CustomResource-WnfNLnBqtXPF',
+        'StackId': 'arn:aws:cloudformation:us-east-2:XXXXXXXXXXXX:stack/wafohio/70c177d0-e2c7-11ed-9e83-02ff465f0e71'
+    }
 
 @pytest.fixture(scope="session")
 def configure_app_access_log_bucket_create_event():
@@ -310,7 +332,7 @@ def configure_web_acl_delete():
             'RequestThreshold': '100',
             'RequestThresholdByCountryParam': 'no',
             'SNSEmailParam': 'no',
-            'SendAnonymousUsageData': 'Yes',
+            'SendAnonymizedUsageData': 'Yes',
             'ServiceToken': 'arn:aws:lambda:us-east-2:XXXXXXXXXXXX:function:wafohio-CustomResource-WnfNLnBqtXPF',
             'UUID': 'b1af171d-e483-4fbc-a494-43492bfb214a',
             'UserDefinedAppAccessLogBucketPrefixParam': 'no',
@@ -391,7 +413,7 @@ def successful_response():
 
 @pytest.fixture(scope="session")
 def app_access_log_bucket_create_event_error_response():
-    return '{"statusCode": "500", "body": {"message": "An error occurred (InvalidTargetBucketForLogging) when calling the PutBucketLogging operation: You must give the log-delivery group WRITE and READ_ACP permissions to the target bucket"}}'
+    return '{"statusCode": "500", "body": {"message": "An error occurred (MalformedXML) when calling the PutBucketLogging operation: The XML you provided was not well-formed or did not validate against our published schema"}}'
 
 @pytest.fixture(scope="session")
 def configure_app_access_log_bucket_delete_event():

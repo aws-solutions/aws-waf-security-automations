@@ -13,13 +13,12 @@
 
 AWSTemplateFormatVersion: 2010-09-09
 Description: >-
-  (SO0006-FA) - Security Automations for AWS WAF - FA %VERSION%: This AWS CloudFormation template helps
+  (SO0006-FA) - Security Automations for AWS WAF - FA: This AWS CloudFormation template helps
   you provision the Security Automations for AWS WAF stack without worrying about creating and
   configuring the underlying AWS infrastructure.
-
   **WARNING** This template creates an AWS Lambda function, an AWS WAF Web ACL, an Amazon S3 bucket,
   and an Amazon CloudWatch custom metric. You will be billed for the AWS resources used if you
-  create a stack from this template.
+  create a stack from this template. %VERSION%
 
 Parameters:
   ActivateHttpFloodProtectionParam:

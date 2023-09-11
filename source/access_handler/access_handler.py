@@ -59,12 +59,12 @@ def get_bad_bot_usage_data(log, scope, cw, ipset_name_v4, ipset_arn_v4, ipset_na
     return usage_data
 
 
-def send_anonymous_usage_data(log, scope, ipset_name_v4, ipset_arn_v4, ipset_name_v6, ipset_arn_v6):
+def send_anonymized_usage_data(log, scope, ipset_name_v4, ipset_arn_v4, ipset_name_v6, ipset_arn_v6):
     try:
-        if 'SEND_ANONYMOUS_USAGE_DATA' not in environ or os.getenv('SEND_ANONYMOUS_USAGE_DATA').lower() != 'yes':
+        if 'SEND_ANONYMIZED_USAGE_DATA' not in environ or os.getenv('SEND_ANONYMIZED_USAGE_DATA').lower() != 'yes':
             return
 
-        log.info("[send_anonymous_usage_data] Start")
+        log.info("[send_anonymized_usage_data] Start")
 
         cw = WAFCloudWatchMetrics(log)
         usage_data = initialize_usage_data()
@@ -94,14 +94,14 @@ def send_anonymous_usage_data(log, scope, ipset_name_v4, ipset_arn_v4, ipset_nam
             ipset_name_v6, ipset_arn_v6, usage_data)
 
         # Send usage data
-        log.info('[send_anonymous_usage_data] Send usage data: \n{}'.format(usage_data))
+        log.info('[send_anonymized_usage_data] Send usage data: \n{}'.format(usage_data))
         response = send_metrics(data=usage_data)
         response_code = response.status_code
-        log.info('[send_anonymous_usage_data] Response Code: {}'.format(response_code))
-        log.info("[send_anonymous_usage_data] End")
+        log.info('[send_anonymized_usage_data] Response Code: {}'.format(response_code))
+        log.info("[send_anonymized_usage_data] End")
 
     except Exception as error:
-        log.info("[send_anonymous_usage_data] Failed to Send Data")
+        log.info("[send_anonymized_usage_data] Failed to Send Data")
         log.error(str(error))
 
 
@@ -176,7 +176,7 @@ def lambda_handler(event, _):
         }
 
     if output is not None:
-        send_anonymous_usage_data(log, scope, ipset_name_v4, ipset_arn_v4, ipset_name_v6, ipset_arn_v6)
+        send_anonymized_usage_data(log, scope, ipset_name_v4, ipset_arn_v4, ipset_name_v6, ipset_arn_v6)
     log.info('[lambda_handler] End')
 
     return response

@@ -19,7 +19,7 @@ from lib.boto3_util import create_client
 class WAFCloudWatchMetrics(object):
     """
     This class creates a wrapper function for cloudwatch get_metric_statistics API
-    and another function to add the waf cw metric statistics to the anonymous usage
+    and another function to add the waf cw metric statistics to the anonymized usage
     data that the solution collects
     """
     def __init__(self, log):
@@ -80,12 +80,12 @@ class WAFCloudWatchMetrics(object):
                                         usage_data, usage_data_field_name, default_value):
         """
         Get the CloudWatch metric statistics given a WAF rule and metric name, and
-        add it to the anonymous usage data collected by the solution.
+        add it to the anonymized usage data collected by the solution.
             Parameters:
                 metric_name: string. The name of the metric. Optional.
                 period_seconds: integer. The granularity, in seconds, of the returned data points.
                 waf_rule: string. The name of the WAF rule.
-                usage_data: JSON. Anonymous customer usage data of the solution
+                usage_data: JSON. Anonymized customer usage data of the solution
                 usage_data_field_name: string. The field name in the usage data whose value will be
                                        replaced by the waf cloudwatch metric (if any)
                 default_value: number. The default value of the field in the usage data 

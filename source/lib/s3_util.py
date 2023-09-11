@@ -169,11 +169,21 @@ class S3(object):
     
     def get_bucket_location(self, bucket_name):
         try:
-            response = self.s3_resource.get_bucket_location(Bucket=bucket_name)
+            response = self.s3_client.get_bucket_location(Bucket=bucket_name)
             self.log.info(
                 "[s3_util: get_bucket_location] response: \n%s" % response)
             return response
         except Exception as e:
             self.log.error("[s3_util: get_bucket_location] Error: %s" % bucket_name)
+            self.log.error(e)
+            raise e
+
+    def put_bucket_policy(self, bucket_name, bucket_policy):
+        try:
+            response = self.s3_client.put_bucket_policy(Bucket=bucket_name, Policy=bucket_policy)
+            self.log.info(f"s3_util: put_bucket_policy response: {response}")
+            return response
+        except Exception as e:
+            self.log.error(f"[s3_util: put_bucket_policy] Error: bucket_name: {bucket_name} bucket_policy: {bucket_policy}")
             self.log.error(e)
             raise e

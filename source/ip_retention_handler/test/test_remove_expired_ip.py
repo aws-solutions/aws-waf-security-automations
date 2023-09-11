@@ -147,42 +147,42 @@ def test_send_notification(sns_topic):
 	assert result == True
 
 
-def test_send_anonymous_usage_data_allowed_list():
+def test_send_anonymized_usage_data_allowed_list():
     try:
-        reip.send_anonymous_usage_data(log, REMOVE_IP_LIST, 'Whitelist')
+        reip.send_anonymized_usage_data(log, REMOVE_IP_LIST, 'Whitelist')
     except Exception as e:
         assert str(e) == EXPECTED_NONE_TYPE_NO_ATTRIBUTE_MESSAGE	
 
 
-def test_send_anonymous_usage_data_denied_list():
+def test_send_anonymized_usage_data_denied_list():
     try:
-        reip.send_anonymous_usage_data(log, REMOVE_IP_LIST, 'Blacklist')
+        reip.send_anonymized_usage_data(log, REMOVE_IP_LIST, 'Blacklist')
     except Exception as e:
         assert str(e) == EXPECTED_NONE_TYPE_NO_ATTRIBUTE_MESSAGE
 
 
-def test_send_anonymous_usage_data_other_list():
+def test_send_anonymized_usage_data_other_list():
     try:
-        reip.send_anonymous_usage_data(log, REMOVE_IP_LIST, 'Otherlist')
+        reip.send_anonymized_usage_data(log, REMOVE_IP_LIST, 'Otherlist')
     except Exception as e:
         assert str(e) == EXPECTED_NONE_TYPE_NO_ATTRIBUTE_MESSAGE
 
 
-def test_send_anonymous_usage_data_empty_list():
+def test_send_anonymized_usage_data_empty_list():
     try:
-        reip.send_anonymous_usage_data(log, [], 'Otherlist')
+        reip.send_anonymized_usage_data(log, [], 'Otherlist')
     except Exception as e:
         assert str(e) == EXPECTED_NONE_TYPE_NO_ATTRIBUTE_MESSAGE
 
 
-def test_no_send_anonymous_usage_data():
-	environ['SEND_ANONYMOUS_USAGE_DATA'] = 'no'
-	result = reip.send_anonymous_usage_data(log, [], 'Otherlist')
+def test_no_send_anonymized_usage_data():
+	environ['SEND_ANONYMIZED_USAGE_DATA'] = 'no'
+	result = reip.send_anonymized_usage_data(log, [], 'Otherlist')
 	result is not None
 
 
 def test_none_ip_set():
-	environ['SEND_ANONYMOUS_USAGE_DATA'] = 'no'
+	environ['SEND_ANONYMIZED_USAGE_DATA'] = 'no'
 	result = reip.get_ip_set(log, None, 'fake-ip-set-name', 'fake-ip-set-id')
 	result is None
         

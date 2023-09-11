@@ -16,6 +16,7 @@
 import datetime
 import json
 
+WHERE_YEAR = "\n\t\tWHERE year = "
 
 def build_athena_query_for_app_access_logs(
     log, log_type, database_name, table_name, end_timestamp,
@@ -323,7 +324,7 @@ def build_athena_query_part_two_for_partition(
         log.debug(
             "[build_athena_query_part_two_for_partition] \
             Same day query filter")
-        query_string = "\n\t\tWHERE year = " + str(start_year) + "\n"  \
+        query_string = WHERE_YEAR + str(start_year) + "\n"  \
                        "\t\tAND month = " + str(start_month).zfill(2) + "\n"  \
                        "\t\tAND day = " + str(start_day).zfill(2) + "\n"  \
                        "\t\tAND hour between "  \
@@ -334,14 +335,14 @@ def build_athena_query_part_two_for_partition(
             "[build_athena_query_part_two_for_partition] \
              Different days - cross days query filter")
         if (start_month == end_month):  # year and month are the same, but days are different
-            query_string = "\n\t\tWHERE year = " + str(start_year) + "\n"  \
+            query_string = WHERE_YEAR + str(start_year) + "\n"  \
                         "\t\tAND month = " + str(start_month).zfill(2) + "\n"  \
                         "\t\tAND (\n"  \
                         "\t\t\t(day = " + str(start_day).zfill(2) + " AND hour >= " + str(start_hour).zfill(2) + ")\n"  \
                         "\t\t\tOR (day = " + str(end_day).zfill(2) + " AND hour <= " + str(end_hour).zfill(2) + ")\n"  \
                         "\t\t)\n"
         else:  # years are the same, but months and days are different
-            query_string = "\n\t\tWHERE year = " + str(start_year) + "\n"  \
+            query_string = WHERE_YEAR + str(start_year) + "\n"  \
                         "\t\tAND (\n"  \
                         "\t\t\t(month = " + str(start_month).zfill(2) + " AND day = " + str(start_day).zfill(2) + " AND hour >= " + str(start_hour).zfill(2) + ")\n"  \
                         "\t\t\tOR (month = " + str(end_month).zfill(2) + " AND day = " + str(end_day).zfill(2) + " AND hour <= " + str(end_hour).zfill(2) + ")\n"  \

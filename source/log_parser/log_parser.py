@@ -69,12 +69,12 @@ def get_log_parser_usage_data(log, waf_rule, cw, ipv4_set_id, ipv6_set_id,
     return usage_data
 
 
-def send_anonymous_usage_data(log):
+def send_anonymized_usage_data(log):
     try:
-        if 'SEND_ANONYMOUS_USAGE_DATA' not in environ or os.getenv('SEND_ANONYMOUS_USAGE_DATA').lower() != 'yes':
+        if 'SEND_ANONYMIZED_USAGE_DATA' not in environ or os.getenv('SEND_ANONYMIZED_USAGE_DATA').lower() != 'yes':
             return
 
-        log.info("[send_anonymous_usage_data] Start")
+        log.info("[send_anonymized_usage_data] Start")
 
         cw = WAFCloudWatchMetrics(log)
         usage_data = initialize_usage_data()
@@ -146,14 +146,14 @@ def send_anonymous_usage_data(log):
         )
 
         # Send usage data
-        log.info('[send_anonymous_usage_data] Send usage data: \n{}'.format(usage_data))
+        log.info('[send_anonymized_usage_data] Send usage data: \n{}'.format(usage_data))
         response = send_metrics(data=usage_data)
         response_code = response.status_code
-        log.info('[send_anonymous_usage_data] Response Code: {}'.format(response_code))
-        log.info("[send_anonymous_usage_data] End")
+        log.info('[send_anonymized_usage_data] Response Code: {}'.format(response_code))
+        log.info("[send_anonymized_usage_data] End")
 
     except Exception as error:
-        log.info("[send_anonymous_usage_data] Failed to send data")
+        log.info("[send_anonymized_usage_data] Failed to send data")
         log.error(str(error))
 
 
@@ -174,49 +174,15 @@ def lambda_handler(event, _):
         athena_log_parser = AthenaLogParser(log)
 
         if "resourceType" in event:
-            athena_log_parser.process_athena_scheduler_event( event)
+            athena_log_parser.process_athena_scheduler_event(event)
             result['message'] = "[lambda_handler] Athena scheduler event processed."
             log.info(result['message'])
 
         elif 'Records' in event:
             lambda_log_parser = LambdaLogParser(log)
-            for r in event['Records']:
-                bucket_name = r['s3']['bucket']['name']
-                key_name = unquote_plus(r['s3']['object']['key'])
-
-                if 'APP_ACCESS_LOG_BUCKET' in environ and bucket_name == os.getenv('APP_ACCESS_LOG_BUCKET'):
-                    if key_name.startswith('athena_results/'):
-                        athena_log_parser.process_athena_result(bucket_name, key_name, scanners)
-                        result['message'] = "[lambda_handler] Athena app log query result processed."
-                        log.info(result['message'])
-
-                    else:
-                        conf_filename = os.getenv('STACK_NAME') + '-app_log_conf.json'
-                        output_filename = os.getenv('STACK_NAME') + '-app_log_out.json'
-                        log_type = os.getenv('LOG_TYPE')
-                        lambda_log_parser.process_log_file(bucket_name, key_name, conf_filename, output_filename, log_type, scanners)
-                        result['message'] = "[lambda_handler] App access log file processed."
-                        log.info(result['message'])
-
-                elif 'WAF_ACCESS_LOG_BUCKET' in environ and bucket_name == os.getenv('WAF_ACCESS_LOG_BUCKET'):
-                    if key_name.startswith('athena_results/'):
-                        athena_log_parser.process_athena_result(bucket_name, key_name, flood)
-                        result['message'] = "[lambda_handler] Athena AWS WAF log query result processed."
-                        log.info(result['message'])
-
-                    else:
-                        conf_filename = os.getenv('STACK_NAME') + '-waf_log_conf.json'
-                        output_filename = os.getenv('STACK_NAME') + '-waf_log_out.json'
-                        log_type = 'waf'
-                        lambda_log_parser.process_log_file(bucket_name, key_name, conf_filename, output_filename, log_type, flood)
-                        result['message'] = "[lambda_handler] AWS WAF access log file processed."
-                        log.info(result['message'])
-
-                else:
-                    result['message'] = "[lambda_handler] undefined handler for bucket %s" % bucket_name
-                    log.info(result['message'])
-
-                send_anonymous_usage_data(log)
+            for record in event['Records']:
+                process_record(record, log, result, athena_log_parser, lambda_log_parser)
+                send_anonymized_usage_data(log)
 
         else:
             result['message'] = "[lambda_handler] undefined handler for this type of event"
@@ -228,3 +194,40 @@ def lambda_handler(event, _):
 
     log.info('[lambda_handler] End')
     return result
+
+
+def process_record(r, log, result, athena_log_parser, lambda_log_parser):
+    bucket_name = r['s3']['bucket']['name']
+    key_name = unquote_plus(r['s3']['object']['key'])
+
+    if 'APP_ACCESS_LOG_BUCKET' in environ and bucket_name == os.getenv('APP_ACCESS_LOG_BUCKET'):
+        if key_name.startswith('athena_results/'):
+            athena_log_parser.process_athena_result(bucket_name, key_name, scanners)
+            result['message'] = "[lambda_handler] Athena app log query result processed."
+            log.info(result['message'])
+
+        else:
+            conf_filename = os.getenv('STACK_NAME') + '-app_log_conf.json'
+            output_filename = os.getenv('STACK_NAME') + '-app_log_out.json'
+            log_type = os.getenv('LOG_TYPE')
+            lambda_log_parser.process_log_file(bucket_name, key_name, conf_filename, output_filename, log_type, scanners)
+            result['message'] = "[lambda_handler] App access log file processed."
+            log.info(result['message'])
+
+    elif 'WAF_ACCESS_LOG_BUCKET' in environ and bucket_name == os.getenv('WAF_ACCESS_LOG_BUCKET'):
+        if key_name.startswith('athena_results/'):
+            athena_log_parser.process_athena_result(bucket_name, key_name, flood)
+            result['message'] = "[lambda_handler] Athena AWS WAF log query result processed."
+            log.info(result['message'])
+
+        else:
+            conf_filename = os.getenv('STACK_NAME') + '-waf_log_conf.json'
+            output_filename = os.getenv('STACK_NAME') + '-waf_log_out.json'
+            log_type = 'waf'
+            lambda_log_parser.process_log_file(bucket_name, key_name, conf_filename, output_filename, log_type, flood)
+            result['message'] = "[lambda_handler] AWS WAF access log file processed."
+            log.info(result['message'])
+
+    else:
+        result['message'] = "[lambda_handler] undefined handler for bucket %s" % bucket_name
+        log.info(result['message'])

@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+
+## [4.0.2] - 2023-09-11
+
+### Fixed
+
+- Update trademarked name. From aws-waf-security-automations.zip to security-automations-for-aws-waf.zip
+- Refactor to reduce code complexity
+- Patched requests package vulnerability leaking Proxy-Authorization headers to destination servers when redirected to an HTTPS endpoint. For more details: [CVE-2023-32681](https://nvd.nist.gov/vuln/detail/CVE-2023-32681) [Github issue 248](https://github.com/aws-solutions/aws-waf-security-automations/issues/248)
+
 ## [4.0.1] - 2023-05-19
 
 ### Fixed

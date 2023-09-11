@@ -130,7 +130,7 @@ class AthenaLogParser(object):
             # --------------------------------------------------------------------------------------------------------------
             self.log.info("[athena_log_parser: process_athena_result] Download file from S3")
             # --------------------------------------------------------------------------------------------------------------
-            local_file_path = '/tmp/' + key_name.split('/')[-1]
+            local_file_path = '/tmp/' + key_name.split('/')[-1] #NOSONAR tmp use for an insensitive workspace
             self.s3_util.download_file_from_s3(bucket_name, key_name, local_file_path)
 
             # --------------------------------------------------------------------------------------------------------------

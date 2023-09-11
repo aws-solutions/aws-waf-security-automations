@@ -44,7 +44,7 @@ def test_environment_vars_setup():
     environ['UUID'] = "waf_test_uuid"
     environ['SOLUTION_ID'] = "waf_test_solution_id"   
     environ['METRICS_URL'] = "https://testurl.com/generic"
-    environ['SEND_ANONYMOUS_USAGE_DATA'] = 'yes'
+    environ['SEND_ANONYMIZED_USAGE_DATA'] = 'yes'
 
 
 @pytest.fixture(scope='module', autouse=True)

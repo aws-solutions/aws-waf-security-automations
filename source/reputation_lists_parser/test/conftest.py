@@ -24,7 +24,7 @@ def test_environment_vars_setup():
     environ['IP_SET_ID_REPUTATIONV4'] = 'arn:aws:wafv2:us-east-1:11111111111:regional/ipset/test'
     environ['IP_SET_ID_REPUTATIONV6'] = 'arn:aws:wafv2:us-east-1:11111111111:regional/ipset/test'
     environ['SCOPE'] = 'REGIONAL'
-    environ['SEND_ANONYMOUS_USAGE_DATA'] = 'Yes'
+    environ['SEND_ANONYMIZED_USAGE_DATA'] = 'Yes'
     environ['LOG_LEVEL'] = 'INFO'
     environ['UUID'] = 'test_uuid'
     environ['SOLUTION_ID'] = 'SO0006'

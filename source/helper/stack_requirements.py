@@ -32,7 +32,7 @@ ACCESS_ISSUE_S3_BUCKET_EXCEPTION_MESSAGE = '''
     Check if you own this bucket and if it has proper access policy.'''
 INCORRECT_REGION_S3_LAMBDA_EXCEPTION_MESSAGE = '''
     Bucket located in a different region. S3 bucket and Log Parser Lambda
-    (and therefore, you CloudFormation Stack) must be created in the same Region.'''
+    (and therefore, your CloudFormation Stack) must be created in the same Region.'''
 
 EMPTY_S3_BUCKET_NAME_EXCEPTION = Exception(EMPTY_S3_BUCKET_NAME_EXCEPTION_MESSAGE)
 ACCESS_ISSUE_S3_BUCKET_EXCEPTION = Exception(ACCESS_ISSUE_S3_BUCKET_EXCEPTION_MESSAGE)
@@ -138,10 +138,8 @@ class StackRequirements:
 
         exists = self.verify_bucket_existence(bucket_name)
         
-        if not exists:
-            return
-        
-        self.verify_bucket_region(bucket_name, region)
+        if exists:
+            self.verify_bucket_region(bucket_name, region)
 
 
     def verify_bucket_region(self, bucket_name: str, region: str) -> None:
@@ -163,6 +161,7 @@ class StackRequirements:
     def verify_bucket_existence(self, bucket_name: str) -> bool:
         try:
             self.s3.head_bucket(bucket_name)
+            return True
 
         except botocore.exceptions.ClientError as e:
             # If a client error is thrown, then check that it was a 404 error.
@@ -197,7 +196,7 @@ class StackRequirements:
     
 
     def generate_suffix(self) -> str:
-        return ''.join([ random.choice(string.ascii_letters + string.digits) for _ in range(6) ])
+        return ''.join([ random.choice(string.ascii_letters + string.digits) for _ in range(6) ]) #NOSONAR short random hash to serve as good enough for a suffix
 
 
     def normalize_stack_name(self, stack_name, suffix) -> str:
