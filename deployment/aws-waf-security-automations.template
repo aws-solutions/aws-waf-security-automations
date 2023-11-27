@@ -710,9 +710,6 @@ Mappings:
             WAFBadBotRule: 'BLOCK'
         UserAgent:
             UserAgentExtra: 'AwsSolution/SO0006/%VERSION%'
-        AppRegistry:
-             AppRegistryApplicationName: 'waf-security-automations'
-             SolutionName: 'WAF Security Automations'
 
 
 Resources:
@@ -735,7 +732,7 @@ Resources:
     DependsOn: CheckRequirements
     Properties:
       TemplateURL: !Sub
-        - 'https://${S3Bucket}.s3.amazonaws.com/${KeyPrefix}/aws-waf-security-automations-firehose-athena.template'
+        - 'https://${S3Bucket}.s3.cn-north-1.amazonaws.com.cn/${KeyPrefix}/aws-waf-security-automations-firehose-athena.template'
         -
           S3Bucket: !FindInMap ["SourceCode", "General", "TemplateBucket"]
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
@@ -760,7 +757,7 @@ Resources:
     DependsOn: CheckRequirements
     Properties:
       TemplateURL: !Sub
-        - 'https://${S3Bucket}.s3.amazonaws.com/${KeyPrefix}/aws-waf-security-automations-webacl.template'
+        - 'https://${S3Bucket}.s3.cn-north-1.amazonaws.com.cn/${KeyPrefix}/aws-waf-security-automations-webacl.template'
         -
           S3Bucket: !FindInMap ["SourceCode", "General", "TemplateBucket"]
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
@@ -2245,6 +2242,9 @@ Resources:
       Description: >-
         API created by AWS WAF Security Automation CloudFormation template. This endpoint will be
         used to capture bad bots.
+      EndpointConfiguration:
+        Types:
+        - REGIONAL
 
   ApiGatewayBadBotResource:
     Type: 'AWS::ApiGateway::Resource'
@@ -2693,68 +2693,6 @@ Resources:
       EventSourceArn: !GetAtt IPRetentionDDBTable.StreamArn
       FunctionName: !GetAtt RemoveExpiredIP.Arn
       StartingPosition: LATEST
-
-  # AppRegistry Application
-  Application:
-    Type: AWS::ServiceCatalogAppRegistry::Application
-    Properties:
-      Description: Service Catalog application to track and manage all your resources for the solution WAF Security Automations. The SolutionID is SO0006 and SolutionVersion is %VERSION%.
-      Name: 
-        !Join
-          - "-"
-          - - !FindInMap [Solution, AppRegistry, "AppRegistryApplicationName"]
-            - !Ref AWS::Region
-            - !Ref AWS::AccountId
-            - !Ref AWS::StackName
-      Tags: {
-      'Solutions:SolutionID': !FindInMap [Solution, Data, "SolutionID"],
-      'Solutions:SolutionVersion': "%VERSION%",
-      'Solutions:SolutionName': !FindInMap [Solution, AppRegistry, "SolutionName"],
-      'Solutions:ApplicationType': 'AWS-Solutions', 
-      }
-
-  AppRegistryApplicationStackAssociation:
-    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
-    Properties:
-      Application: !GetAtt Application.Id
-      Resource:
-        !Ref AWS::StackId
-      ResourceType: CFN_STACK
-
-  AppRegistryApplicationStackAssociationNestedStackWebACL:
-    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
-    Properties:
-      Application: !GetAtt Application.Id
-      Resource: 
-        !Ref WebACLStack
-      ResourceType: CFN_STACK
-
-  AppRegistryApplicationStackAssociationNestedStackFirehoseAthena:
-    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
-    Condition: CreateFirehoseAthenaStack
-    Properties:
-      Application: !GetAtt Application.Id
-      Resource: 
-        !Ref FirehoseAthenaStack
-      ResourceType: CFN_STACK
-
-  DefaultApplicationAttributeGroup:
-    Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
-    Properties:
-      Name: !Sub 'AttrGrp-${AWS::Region}-${AWS::StackName}'
-      Description: Attribute group for solution information.
-      Attributes:       
-        { "ApplicationType" : 'AWS-Solutions',
-          "Version": "%VERSION%",
-          "SolutionID": !FindInMap [Solution, Data, "SolutionID"],
-          "SolutionName": !FindInMap [Solution, AppRegistry, "SolutionName"]
-        }
-
-  AppRegistryApplicationAttributeAssociation:
-    Type: AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation
-    Properties:
-      Application: !GetAtt Application.Id
-      AttributeGroup: !GetAtt DefaultApplicationAttributeGroup.Id
 
 Outputs:
   BadBotHoneypotEndpoint:
