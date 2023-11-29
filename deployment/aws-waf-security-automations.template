@@ -413,7 +413,7 @@ Parameters:
     AllowedValues:
       - 'CloudFront'
       - 'ALB'
-    Description: Select the resource type and then select the resource below that you want to associate with this web ACL.
+    Description: Select the resource type and then select the resource below that you want to associate with this web ACL. If you are deploying in China regions, please do not select CloudFront.
 
   AppAccessLogBucket:
     Type: String
@@ -630,6 +630,10 @@ Conditions:
     - Condition: HttpFloodProtectionLogParserActivated
     - Condition: AthenaLogParser
 
+  CreateAppRegistryApplicationStackAssociationNestedStackFirehoseAthena: !And
+    - Condition: CreateFirehoseAthenaStack
+    - Condition: IsNotChinaRegion
+
   ReputationListsProtectionActivated: !Equals
     - !Ref ActivateReputationListsProtectionParam
     - 'yes'
@@ -686,6 +690,8 @@ Conditions:
 
   LogGroupRetentionEnabled: !Not [!Equals [!Ref LogGroupRetentionParam, -1]]
 
+  IsNotChinaRegion:  !Not  [!Equals [!Ref AWS::Partition, 'aws-cn']]
+
 Mappings:
     SourceCode:
         General:
@@ -710,7 +716,14 @@ Mappings:
             WAFBadBotRule: 'BLOCK'
         UserAgent:
             UserAgentExtra: 'AwsSolution/SO0006/%VERSION%'
-
+        AppRegistry:
+             AppRegistryApplicationName: 'waf-security-automations'
+             SolutionName: 'WAF Security Automations'
+    AwsPartionURL:
+        aws:
+            BucketURL: 'amazonaws.com'
+        aws-cn:
+            BucketURL: 'cn-north-1.amazonaws.com.cn'
 
 Resources:
   CheckRequirements:
@@ -732,8 +745,9 @@ Resources:
     DependsOn: CheckRequirements
     Properties:
       TemplateURL: !Sub
-        - 'https://${S3Bucket}.s3.cn-north-1.amazonaws.com.cn/${KeyPrefix}/aws-waf-security-automations-firehose-athena.template'
+        - 'https://${S3Bucket}.s3.${AwsPartionURL}/${KeyPrefix}/aws-waf-security-automations-firehose-athena.template'
         -
+          AwsPartionURL: !FindInMap ["AwsPartionURL", !Ref AWS::Partition, "BucketURL"]
           S3Bucket: !FindInMap ["SourceCode", "General", "TemplateBucket"]
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
       Parameters:
@@ -757,8 +771,9 @@ Resources:
     DependsOn: CheckRequirements
     Properties:
       TemplateURL: !Sub
-        - 'https://${S3Bucket}.s3.cn-north-1.amazonaws.com.cn/${KeyPrefix}/aws-waf-security-automations-webacl.template'
+        - 'https://${S3Bucket}.s3.${AwsPartionURL}/${KeyPrefix}/aws-waf-security-automations-webacl.template'
         -
+          AwsPartionURL: !FindInMap ["AwsPartionURL", !Ref AWS::Partition, "BucketURL"]
           S3Bucket: !FindInMap ["SourceCode", "General", "TemplateBucket"]
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
       Parameters:
@@ -2244,7 +2259,10 @@ Resources:
         used to capture bad bots.
       EndpointConfiguration:
         Types:
-        - REGIONAL
+          Fn::If:
+          - IsNotChinaRegion
+          - ['EDGE']
+          - ['REGIONAL']
 
   ApiGatewayBadBotResource:
     Type: 'AWS::ApiGateway::Resource'
@@ -2693,6 +2711,73 @@ Resources:
       EventSourceArn: !GetAtt IPRetentionDDBTable.StreamArn
       FunctionName: !GetAtt RemoveExpiredIP.Arn
       StartingPosition: LATEST
+
+  # AppRegistry Application
+  Application:
+    Type: AWS::ServiceCatalogAppRegistry::Application
+    Condition: IsNotChinaRegion
+    Properties:
+      Description: Service Catalog application to track and manage all your resources for the solution WAF Security Automations. The SolutionID is SO0006 and SolutionVersion is %VERSION%.
+      Name: 
+        !Join
+          - "-"
+          - - !FindInMap [Solution, AppRegistry, "AppRegistryApplicationName"]
+            - !Ref AWS::Region
+            - !Ref AWS::AccountId
+            - !Ref AWS::StackName
+      Tags: {
+      'Solutions:SolutionID': !FindInMap [Solution, Data, "SolutionID"],
+      'Solutions:SolutionVersion': "%VERSION%",
+      'Solutions:SolutionName': !FindInMap [Solution, AppRegistry, "SolutionName"],
+      'Solutions:ApplicationType': 'AWS-Solutions', 
+      }
+
+  AppRegistryApplicationStackAssociation:
+    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Condition: IsNotChinaRegion
+    Properties:
+      Application: !GetAtt Application.Id
+      Resource:
+        !Ref AWS::StackId
+      ResourceType: CFN_STACK
+
+  AppRegistryApplicationStackAssociationNestedStackWebACL:
+    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Condition: IsNotChinaRegion
+    Properties:
+      Application: !GetAtt Application.Id
+      Resource: 
+        !Ref WebACLStack
+      ResourceType: CFN_STACK
+
+  AppRegistryApplicationStackAssociationNestedStackFirehoseAthena:
+    Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Condition: CreateAppRegistryApplicationStackAssociationNestedStackFirehoseAthena
+    Properties:
+      Application: !GetAtt Application.Id
+      Resource: 
+        !Ref FirehoseAthenaStack
+      ResourceType: CFN_STACK
+
+  DefaultApplicationAttributeGroup:
+    Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
+    Condition: IsNotChinaRegion
+    Properties:
+      Name: !Sub 'AttrGrp-${AWS::Region}-${AWS::StackName}'
+      Description: Attribute group for solution information.
+      Attributes:       
+        { "ApplicationType" : 'AWS-Solutions',
+          "Version": "%VERSION%",
+          "SolutionID": !FindInMap [Solution, Data, "SolutionID"],
+          "SolutionName": !FindInMap [Solution, AppRegistry, "SolutionName"]
+        }
+
+  AppRegistryApplicationAttributeAssociation:
+    Type: AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation
+    Condition: IsNotChinaRegion
+    Properties:
+      Application: !GetAtt Application.Id
+      AttributeGroup: !GetAtt DefaultApplicationAttributeGroup.Id
 
 Outputs:
   BadBotHoneypotEndpoint:
