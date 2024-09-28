@@ -413,7 +413,7 @@ Parameters:
     AllowedValues:
       - 'CloudFront'
       - 'ALB'
-    Description: Select the resource type and then select the resource below that you want to associate with this web ACL.
+    Description: Select the resource type and then select the resource below that you want to associate with this web ACL. If you are deploying in China regions, please do not select CloudFront.
 
   AppAccessLogBucket:
     Type: String
@@ -630,6 +630,10 @@ Conditions:
     - Condition: HttpFloodProtectionLogParserActivated
     - Condition: AthenaLogParser
 
+  CreateAppRegistryApplicationStackAssociationNestedStackFirehoseAthena: !And
+    - Condition: CreateFirehoseAthenaStack
+    - Condition: IsNotChinaRegion
+
   ReputationListsProtectionActivated: !Equals
     - !Ref ActivateReputationListsProtectionParam
     - 'yes'
@@ -686,6 +690,8 @@ Conditions:
 
   LogGroupRetentionEnabled: !Not [!Equals [!Ref LogGroupRetentionParam, -1]]
 
+  IsNotChinaRegion:  !Not  [!Equals [!Ref AWS::Partition, 'aws-cn']]
+
 Mappings:
     SourceCode:
         General:
@@ -713,7 +719,11 @@ Mappings:
         AppRegistry:
              AppRegistryApplicationName: 'waf-security-automations'
              SolutionName: 'WAF Security Automations'
-
+    AwsPartionURL:
+        aws:
+            BucketURL: 'amazonaws.com'
+        aws-cn:
+            BucketURL: 'cn-north-1.amazonaws.com.cn'
 
 Resources:
   CheckRequirements:
@@ -735,8 +745,9 @@ Resources:
     DependsOn: CheckRequirements
     Properties:
       TemplateURL: !Sub
-        - 'https://${S3Bucket}.s3.amazonaws.com/${KeyPrefix}/aws-waf-security-automations-firehose-athena.template'
+        - 'https://${S3Bucket}.s3.${AwsPartionURL}/${KeyPrefix}/aws-waf-security-automations-firehose-athena.template'
         -
+          AwsPartionURL: !FindInMap ["AwsPartionURL", !Ref AWS::Partition, "BucketURL"]
           S3Bucket: !FindInMap ["SourceCode", "General", "TemplateBucket"]
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
       Parameters:
@@ -760,8 +771,9 @@ Resources:
     DependsOn: CheckRequirements
     Properties:
       TemplateURL: !Sub
-        - 'https://${S3Bucket}.s3.amazonaws.com/${KeyPrefix}/aws-waf-security-automations-webacl.template'
+        - 'https://${S3Bucket}.s3.${AwsPartionURL}/${KeyPrefix}/aws-waf-security-automations-webacl.template'
         -
+          AwsPartionURL: !FindInMap ["AwsPartionURL", !Ref AWS::Partition, "BucketURL"]
           S3Bucket: !FindInMap ["SourceCode", "General", "TemplateBucket"]
           KeyPrefix: !FindInMap ["SourceCode", "General", "KeyPrefix"]
       Parameters:
@@ -2245,6 +2257,12 @@ Resources:
       Description: >-
         API created by AWS WAF Security Automation CloudFormation template. This endpoint will be
         used to capture bad bots.
+      EndpointConfiguration:
+        Types:
+          Fn::If:
+          - IsNotChinaRegion
+          - ['EDGE']
+          - ['REGIONAL']
 
   ApiGatewayBadBotResource:
     Type: 'AWS::ApiGateway::Resource'
@@ -2697,6 +2715,7 @@ Resources:
   # AppRegistry Application
   Application:
     Type: AWS::ServiceCatalogAppRegistry::Application
+    Condition: IsNotChinaRegion
     Properties:
       Description: Service Catalog application to track and manage all your resources for the solution WAF Security Automations. The SolutionID is SO0006 and SolutionVersion is %VERSION%.
       Name: 
@@ -2715,6 +2734,7 @@ Resources:
 
   AppRegistryApplicationStackAssociation:
     Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Condition: IsNotChinaRegion
     Properties:
       Application: !GetAtt Application.Id
       Resource:
@@ -2723,6 +2743,7 @@ Resources:
 
   AppRegistryApplicationStackAssociationNestedStackWebACL:
     Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
+    Condition: IsNotChinaRegion
     Properties:
       Application: !GetAtt Application.Id
       Resource: 
@@ -2731,7 +2752,7 @@ Resources:
 
   AppRegistryApplicationStackAssociationNestedStackFirehoseAthena:
     Type: AWS::ServiceCatalogAppRegistry::ResourceAssociation
-    Condition: CreateFirehoseAthenaStack
+    Condition: CreateAppRegistryApplicationStackAssociationNestedStackFirehoseAthena
     Properties:
       Application: !GetAtt Application.Id
       Resource: 
@@ -2740,6 +2761,7 @@ Resources:
 
   DefaultApplicationAttributeGroup:
     Type: AWS::ServiceCatalogAppRegistry::AttributeGroup
+    Condition: IsNotChinaRegion
     Properties:
       Name: !Sub 'AttrGrp-${AWS::Region}-${AWS::StackName}'
       Description: Attribute group for solution information.
@@ -2752,6 +2774,7 @@ Resources:
 
   AppRegistryApplicationAttributeAssociation:
     Type: AWS::ServiceCatalogAppRegistry::AttributeGroupAssociation
+    Condition: IsNotChinaRegion
     Properties:
       Application: !GetAtt Application.Id
       AttributeGroup: !GetAtt DefaultApplicationAttributeGroup.Id
