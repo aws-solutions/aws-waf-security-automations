@@ -145,10 +145,16 @@ def lambda_handler(event, _):
 
         # Fixed as old line had security exposure based on user supplied IP address
         log.info("Event->%s<-", str(event))
-        if event['requestContext']['identity']['userAgent'] == 'Amazon CloudFront':
-            source_ip = str(event['headers']['X-Forwarded-For'].split(',')[0].strip())
+        source_ip = None
+        request_context = event.get('requestContext', {})
+        identity = request_context.get('identity', {})
+
+        if identity.get('userAgent') == 'Amazon CloudFront':
+            source_ip = event['headers']['X-Forwarded-For'].split(',')[0].strip()
+        elif 'elb' in request_context:
+            source_ip = event['headers']['x-forwarded-for'].split(',')[0].strip()
         else:
-            source_ip = str(event['requestContext']['identity']['sourceIp'])
+            source_ip = identity.get('sourceIp')
 
         log.info("scope = %s", scope)
         log.info("ipset_name_v4 = %s", ipset_name_v4)
