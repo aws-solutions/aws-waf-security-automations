@@ -425,15 +425,19 @@ xml under the MIT license.
 prettier under the MIT license.
 ts-jest under the MIT license.
 bs-logger under the MIT license.
-ejs under the Apache-2.0 license.
-jake under the Apache-2.0 license.
-async under the MIT license.
-filelist under the Apache-2.0 license.
+handlebars under the MIT license.
+minimist under the MIT license.
+neo-async under the MIT license.
+wordwrap under the MIT license.
+uglify-js under the BSD-2-Clause license.
 lodash.memoize under the MIT license.
 certifi under the MPL-2.0 license.
 charset-normalizer under the MIT license.
 idna under the 0BSD license.
 requests under the Apache-2.0 license.
+@aws-cdk/cloud-assembly-api under the Apache-2.0 license.
+tinyglobby under the ISC license.
+fdir under the MIT license.
 
 ********************
 OPEN SOURCE LICENSES
@@ -448,4 +452,5 @@ BSD-3-Clause - https://spdx.org/licenses/BSD-3-Clause.html
 CC-BY-4.0 - https://spdx.org/licenses/CC-BY-4.0.html
 ISC - https://spdx.org/licenses/ISC.html
 MIT - https://spdx.org/licenses/MIT.html
+BlueOak-1.0.0 - https://spdx.org/licenses/BlueOak-1.0.0.html
 Python-2.0 - https://spdx.org/licenses/Python-2.0.html

@@ -4,11 +4,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.3] - 2026-04-09
+
+### Security
+
+- Updated cryptography to version 46.0.7 to address [CVE-2026-26007](https://avd.aquasec.com/nvd/2026/cve-2026-26007/), [CVE-2026-34073](https://nvd.nist.gov/vuln/detail/CVE-2026-34073), and [CVE-2026-39892](https://avd.aquasec.com/nvd/cve-2026-39892)
+- Updated werkzeug to version 3.1.6 to address [CVE-2026-27199](https://avd.aquasec.com/nvd/cve-2026-27199)
+- Updated minimatch to version 3.1.5 to address [CVE-2026-26996](https://avd.aquasec.com/nvd/cve-2026-26996)
+- Updated aws-cdk-lib to version 2.248.0 to address [CVE-2025-69873](https://avd.aquasec.com/nvd/cve-2025-69873), [CVE-2026-27903](https://nvd.nist.gov/vuln/detail/CVE-2026-27903), [CVE-2026-33532](https://nvd.nist.gov/vuln/detail/CVE-2026-33532), and [CVE-2026-33750](https://nvd.nist.gov/vuln/detail/CVE-2026-33750)
+- Updated flatted to version 3.4.2 to address [CVE-2026-32141](https://avd.aquasec.com/nvd/cve-2026-32141) and [CVE-2026-33228](https://nvd.nist.gov/vuln/detail/CVE-2026-33228)
+- Updated picomatch to versions 2.3.2 and 4.0.4 to address [CVE-2026-33671](https://nvd.nist.gov/vuln/detail/CVE-2026-33671) and [CVE-2026-33672](https://nvd.nist.gov/vuln/detail/CVE-2026-33672)
+- Updated brace-expansion to versions 1.1.13 and 5.0.5 to address [CVE-2026-33750](https://nvd.nist.gov/vuln/detail/CVE-2026-33750)
+- Updated requests to version 2.33.1 to address insecure temp file reuse in extract_zipped_paths()
+
 ## [4.1.2] - 2026-01-14
 
 ### Security
 
-- Updated urllib3 to version 2.6.3 to address [CVE-2026-21441 ](https://avd.aquasec.com/nvd/cve-2026-21441)
+- Updated urllib3 to version 2.6.3 to address [CVE-2026-21441](https://avd.aquasec.com/nvd/cve-2026-21441)
 - Updated werkzeug to version 3.1.5 to address [CVE-2026-21860](https://avd.aquasec.com/nvd/cve-2026-21860)
 
 ## [4.1.1] - 2025-12-29
