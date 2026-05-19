@@ -433,6 +433,7 @@ uglify-js under the BSD-2-Clause license.
 lodash.memoize under the MIT license.
 certifi under the MPL-2.0 license.
 charset-normalizer under the MIT license.
+pygments under the BSD-2-Clause license.
 idna under the 0BSD license.
 requests under the Apache-2.0 license.
 @aws-cdk/cloud-assembly-api under the Apache-2.0 license.
