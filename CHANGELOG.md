@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.5] - 2026-08-06
+
+### Security
+
+- Updated cryptography to version 50.0.0 to address [GHSA-537c-gmf6-5ccf](https://github.com/advisories/GHSA-537c-gmf6-5ccf) and additional cryptography advisories (PKCS#7 EnvelopedData Bleichenbacher oracle, name-constraints wildcard DNS bypass, and X.509 path-building denial of service)
+- Updated aws-cdk-lib to version 2.263.0 to address [CVE-2026-13760](https://nvd.nist.gov/vuln/detail/CVE-2026-13760) and to remove the bundled vulnerable fast-uri ([CVE-2026-13676](https://nvd.nist.gov/vuln/detail/CVE-2026-13676), [CVE-2026-16221](https://nvd.nist.gov/vuln/detail/CVE-2026-16221))
+- Updated brace-expansion to versions 1.1.18 and 5.0.9 to address [CVE-2026-13149](https://nvd.nist.gov/vuln/detail/CVE-2026-13149), [CVE-2026-14257](https://nvd.nist.gov/vuln/detail/CVE-2026-14257), [CVE-2026-45149](https://nvd.nist.gov/vuln/detail/CVE-2026-45149), and [GHSA-rgw5-rvv9-x895](https://github.com/advisories/GHSA-rgw5-rvv9-x895)
+- Updated js-yaml to versions 4.3.1 to address [CVE-2026-53550](https://nvd.nist.gov/vuln/detail/CVE-2026-53550) and [CVE-2026-59869](https://nvd.nist.gov/vuln/detail/CVE-2026-59869)
+- Updated @babel/core to version 7.29.7 to address [CVE-2026-49356](https://nvd.nist.gov/vuln/detail/CVE-2026-49356)
+
 ## [4.1.4] - 2026-05-19
 
 ### Security

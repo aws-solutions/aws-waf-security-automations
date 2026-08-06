@@ -52,6 +52,11 @@ export DIST_OUTPUT_BUCKET=$2
 export SOLUTION_NAME=$3
 export VERSION=$4
 
+# aws-cdk-lib runs a default CloudFormation template validation plugin (cfn-lint
+# compiled to WASM) on every synth. It only produces warnings but adds several
+# minutes to `cdk synth` for this stack, so disable it to keep the build fast.
+export CDK_VALIDATION=false
+
 if [[ -z "$SOLUTION_NAME" ]]; then
     export SOLUTION_NAME='security-automations-for-aws-waf'
 fi
