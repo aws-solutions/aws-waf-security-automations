@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.7] - 2026-10-13
+
+### Security
+
+- Updated urllib3 to version 2.8.0 to address [CVE-2026-97687](https://avd.aquasec.com/nvd/cve-2026-97687), [CVE-2026-97688](https://avd.aquasec.com/nvd/cve-2026-97688), and [CVE-2026-97689](https://avd.aquasec.com/nvd/cve-2026-97689)
+- Updated werkzeug to version 3.1.9 to address [CVE-2026-102598](https://avd.aquasec.com/nvd/cve-2026-102598)
+- Updated brace-expansion to versions 1.1.21, 2.1.7, and 5.0.12 to address [CVE-2026-102276](https://avd.aquasec.com/nvd/cve-2026-102276), [CVE-2026-102277](https://avd.aquasec.com/nvd/cve-2026-102277), and [CVE-2026-102278](https://avd.aquasec.com/nvd/cve-2026-102278). aws-cdk-lib is upgraded to 2.273.0 to pick up the patched copy it bundles
+- Updated handlebars to version 4.7.10 to address [CVE-2026-106444](https://avd.aquasec.com/nvd/cve-2026-106444), [CVE-2026-106445](https://avd.aquasec.com/nvd/cve-2026-106445), and [CVE-2026-106446](https://avd.aquasec.com/nvd/cve-2026-106446)
+- Updated js-yaml to versions 3.15.2 and 4.3.2 to address [CVE-2026-84375](https://avd.aquasec.com/nvd/cve-2026-84375)
+
+### Fixed
+
+- Fixed standalone Bad Bot Protection (HTTP Flood and Scanners & Probes disabled) failing to block bad-bot IPs: the Lambda log parser no longer requires the `waf_log_conf.json` config file that is absent in this configuration ([#308](https://github.com/aws-solutions/aws-waf-security-automations/issues/308))
+
 ## [4.1.6] - 2026-08-20
 
 ### Security

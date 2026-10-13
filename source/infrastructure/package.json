@@ -1,6 +1,6 @@
 {
   "name": "@amzn/aws-waf-security-automations",
-  "version": "4.1.6",
+  "version": "4.1.7",
   "bin": {
     "infrastructure": "bin/aws-waf-security-automations.js"
   },
@@ -32,12 +32,12 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "aws-cdk-lib": "2.265.0",
+    "aws-cdk-lib": "2.273.0",
     "constructs": "^10.4.2"
   },
   "overrides": {
-    "minimatch@3.x": "3.1.5",
-    "brace-expansion@5.x": "5.0.9"
+    "minimatch@3.x": "^3.1.5",
+    "brace-expansion@5.x": "^5.0.12"
   },
   "private": true,
   "license": "Apache-2.0",
