@@ -692,7 +692,9 @@ class LambdaLogParser(object):
         # --------------------------------------------------------------------------------------------------------------
         self.log.info("[lambda_log_parser: process_log_file] Reading input data and get outstanding requesters")
         # --------------------------------------------------------------------------------------------------------------
-        self.config = self.s3_util.read_json_config_file_from_s3(bucket_name, conf_filename)
+        self.config = {}
+        if self.is_full_log():
+            self.config = self.s3_util.read_json_config_file_from_s3(bucket_name, conf_filename)
         counter, outstanding_requesters, bad_bot_ips = self.parse_log_file(bucket_name, key_name, log_type)
 
         is_requesters_update = False
